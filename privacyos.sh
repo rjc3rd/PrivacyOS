@@ -447,6 +447,14 @@ configure_dns() {
   fi
 
   log "Configuring encrypted DNS ($DNS_PROVIDER) via systemd-resolved..."
+  # Unlike Ubuntu, Debian doesn't install or enable systemd-resolved by
+  # default — NetworkManager writes /etc/resolv.conf directly instead, and
+  # the service unit genuinely isn't there until installed. Confirmed via
+  # testing, not assumed — it's a real, separate package on Trixie, not
+  # bundled into systemd itself.
+  apt_install systemd-resolved
+  sudo systemctl enable --now systemd-resolved
+
   local dns_setting dot_enabled="yes"
   case "$DNS_PROVIDER" in
     quad9)   dns_setting="9.9.9.9#dns.quad9.net" ;;
@@ -469,7 +477,8 @@ configure_dns() {
   printf '[main]\ndns=systemd-resolved\n' \
     | sudo tee /etc/NetworkManager/conf.d/privacyos-dns.conf > /dev/null
 
-  sudo systemctl restart systemd-resolved
+  sudo systemctl restart systemd-resolved \
+    || warn "Couldn't restart systemd-resolved — DNS config may not be active yet, but continuing."
   sudo systemctl restart NetworkManager 2>/dev/null || true
   warn "DNS config is a first pass — verify 'resolvectl status' shows it after reboot; network-manager interactions can vary by hardware."
 }
