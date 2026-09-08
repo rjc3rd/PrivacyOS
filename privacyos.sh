@@ -584,12 +584,17 @@ harden_browsers() {
   # deliberately. Give it just the project's own small overrides instead.
   if [[ "$WANT_LIBREWOLF" == "yes" ]]; then
     local profile_dir
-    profile_dir="$(find "$HOME/.librewolf" -maxdepth 1 -name '*.default*' 2>/dev/null | head -n1)"
+    # || true: find on a path that doesn't exist yet returns non-zero, and
+    # under pipefail that kills the whole script even though "no profile
+    # yet" is the normal, expected state here -- this browser's only been
+    # installed, never launched, so its profile folder can't exist yet.
+    # Confirmed via testing: this isn't an edge case, it's every run.
+    profile_dir="$(find "$HOME/.librewolf" -maxdepth 1 -name '*.default*' 2>/dev/null | head -n1)" || true
     [[ -n "$profile_dir" ]] && cp "$overrides" "$profile_dir/user.js" 2>/dev/null || true
   fi
   for browser_home in "$HOME/.mozilla/firefox" "$HOME/.waterfox"; do
     local profile_dir
-    profile_dir="$(find "$browser_home" -maxdepth 1 -name '*.default*' 2>/dev/null | head -n1)"
+    profile_dir="$(find "$browser_home" -maxdepth 1 -name '*.default*' 2>/dev/null | head -n1)" || true
     [[ -n "$profile_dir" ]] && cp "$workdir/full-user.js" "$profile_dir/user.js" 2>/dev/null || true
   done
   rm -rf "$workdir"
@@ -907,11 +912,14 @@ cat "$workdir"/arkenfox-user.js "$workdir"/betterfox-user.js "$overrides" \
 # hardens its own defaults, so it gets just the small overrides file, not
 # the full Arkenfox/Betterfox stack — keep these two in sync if either
 # changes.
-profile_dir="$(find "$HOME/.librewolf" -maxdepth 1 -name '*.default*' 2>/dev/null | head -n1)"
+# || true: find on a path that doesn't exist yet returns non-zero, and
+# under pipefail that kills the whole script even though "no profile yet"
+# is a normal state to find a browser in.
+profile_dir="$(find "$HOME/.librewolf" -maxdepth 1 -name '*.default*' 2>/dev/null | head -n1)" || true
 if [[ -n "$profile_dir" ]]; then cp "$overrides" "$profile_dir/user.js" 2>/dev/null || true; fi
 
 for browser_home in "$HOME/.mozilla/firefox" "$HOME/.waterfox"; do
-  profile_dir="$(find "$browser_home" -maxdepth 1 -name '*.default*' 2>/dev/null | head -n1)"
+  profile_dir="$(find "$browser_home" -maxdepth 1 -name '*.default*' 2>/dev/null | head -n1)" || true
   if [[ -n "$profile_dir" ]]; then cp "$workdir/full-user.js" "$profile_dir/user.js" 2>/dev/null || true; fi
 done
 rm -rf "$workdir"
