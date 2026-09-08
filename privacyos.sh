@@ -346,6 +346,8 @@ apt_cleanup() { purge_old_kernels; sudo apt-get clean -y; sudo apt-get autoclean
 # ============================================================
 
 configure_sources_list() {
+  log "Everything from here is unattended — no more prompts until it's done. This is where the real changes actually happen: packages, repos, DNS, the hosts file, browser hardening. Expect 15-20 minutes depending on your connection and hardware — long quiet stretches are normal while apt or a download works in the background, not a sign it's stuck."
+  pause 5
   log "Writing /etc/apt/sources.list for Debian 13 (Trixie)..."
   # Explicit codename, never the generic "stable" alias — keeps this script's
   # target fixed even after the next Debian release ships and stable moves on.
@@ -932,8 +934,8 @@ install_theme_extras() {
 install_apps_extras() {
   log "Installing the creative/media/dev app bundle..."
   apt_install gimp inkscape darktable rawtherapee scribus flowblade audacity \
-    audacious mpv celluloid deluge simplescreenrecorder codium terminator \
-    mintstick dconf-editor gnome-clocks
+    audacious mpv celluloid deluge filezilla simplescreenrecorder codium \
+    terminator mintstick dconf-editor gnome-clocks
 
   log "Installing a small, deliberately curated set of basic games..."
   # Explicitly not the old gnome-games bundle (already purged in core) --
@@ -1092,7 +1094,7 @@ Welcome to PrivacyOS
 Your system has been hardened. Most of this isn't visible at a glance, so here's a plain summary of what actually changed.
 
 BROWSERS
-LibreWolf (your primary browser), Firefox, and Waterfox all got hardened preferences (Arkenfox + Betterfox, or LibreWolf's own strong defaults) plus a curated set of privacy extensions: an ad/tracker blocker, a URL cleaner, Google link-tracking removal, password manager integration, and a few more. Tor Browser is installed for real Tor browsing. Chromium is kept deliberately bare, no extensions - it's there on purpose, an isolated fallback for the rare site that needs it, kept separate from your real browsing identity.
+LibreWolf (your primary browser), Firefox, and Waterfox all got hardened preferences (Arkenfox + Betterfox, or LibreWolf's own strong defaults) plus a curated set of privacy extensions: an ad/tracker blocker, a URL cleaner, Google link-tracking removal, password manager integration, and a few more. Tor Browser is installed for real Tor browsing. Chromium is kept deliberately bare, no extensions - it's there on purpose, but not for everyday use. Every now and then a site just won't work right under a hardened browser - strict tracking protection or an ad blocker gets in its way, job-application sites being a common example. Rather than turning off your hardening to deal with one stubborn site, open Chromium, do that one thing, then close it and go back to your real browser. A one-off tool, not a second daily driver.
 
 DNS AND NETWORK
 DNS queries go out encrypted, through Quad9, instead of in the clear through your ISP. RiseupVPN and Tor are both installed and ready whenever you want them.
@@ -1107,7 +1109,7 @@ SECURE DELETE
 Right-click any file or folder in the Nemo file manager, look for "Scripts" in the menu, then "Secure-Delete" inside it. That overwrites and deletes it for good, not just to the trash.
 
 KEEPING IT CURRENT
-Run "upgrade" in a terminal any time - it updates the system, cleans out old kernels, and refreshes the hosts list and browser hardening, all in one command.
+Running "sudo apt update && sudo apt upgrade" on its own keeps packages current, but won't refresh your hosts blocklist or browser hardening - those can quietly drift out of date. Instead, just type "upgrade" in a terminal any time. It'll ask for your password, then handle all of it in one pass: the full system upgrade, old kernel cleanup, a rebuilt hosts file, and refreshed browser preferences - everything hardened here, kept current, in one command.
 
 Read privacyos.sh itself any time to see exactly what was done - nothing here is hidden.
 

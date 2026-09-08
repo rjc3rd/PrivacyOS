@@ -187,6 +187,12 @@ dialog if available, a plain terminal prompt otherwise. E.g.
 -h, --help                      show help and exit
 ```
 
+Once every prompt is answered and it actually starts making changes, expect
+it to take **15-20 minutes**, depending on your connection and hardware —
+it's genuinely doing a lot (packages, repos, DNS, the hosts file, browser
+hardening), not stuck. Long quiet stretches while `apt` or a download works
+in the background are normal.
+
 ## What the core install does
 
 - Points `/etc/apt/sources.list` at Debian 13/Trixie explicitly (not the
@@ -248,7 +254,7 @@ isn't forced on anyone who just wants the core setup.
 - `--theme`: Cinnamon config, Mint-Y-Dark theme, icons, wallpapers. **Not yet
   built** — tracked for a future update.
 - `--apps`: GIMP, Inkscape, darktable, RawTherapee, Scribus, Flowblade,
-  Audacity, Audacious, mpv, Celluloid, Deluge, SimpleScreenRecorder,
+  Audacity, Audacious, mpv, Celluloid, Deluge, FileZilla, SimpleScreenRecorder,
   VSCodium, Terminator, mintstick, dconf-editor, gnome-clocks, plus a
   small, deliberately curated set of basic games — Mahjongg, Mines,
   Moonlander, Reversi, Solitaire, Sudoku, Yahtzee — chosen specifically
