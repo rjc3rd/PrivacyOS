@@ -107,46 +107,47 @@ makes it real protection in the first place.
 
 ## Quick start
 
-**If you set a root password during Debian's installer** (the traditional
-Debian way — different from Ubuntu, which leaves root disabled and adds
-your user to `sudo` automatically), your regular user isn't a sudoer yet by
-default. If a plain `sudo -v` fails with something like "is not in the
-sudoers file," fix that first:
+Nothing about what's actually installed on a fresh system can be assumed
+here — not `git`, not `wget`, not `curl`, and not even that your user has
+`sudo` access yet (depends on a choice made during Debian's own installer).
+The only thing guaranteed to be there is a **browser** — it's part of the
+live image itself — so that's the one manual step:
 
-```sh
-su -c "usermod -aG sudo $(whoami)"
-newgrp sudo
-```
+1. Open the browser, go to
+   [install.sh](https://raw.githubusercontent.com/rjc3rd/PrivacyOS/main/install.sh),
+   save it (`Ctrl+S` or right-click → Save Page As) to your Downloads
+   folder.
+2. Open a terminal:
+   ```sh
+   cd ~/Downloads
+   chmod +x install.sh
+   ./install.sh
+   ```
 
-`su` (not `sudo`) since you don't have sudo rights yet — enter your **root**
-password when prompted, not your user password. `newgrp sudo` activates the
-new group membership immediately in this terminal; if it ever doesn't
-behave as expected, logging out and back in (or a reboot) always works too.
+That one file handles everything else in order: checks whether your user
+has `sudo` yet and walks you through fixing it if not (safe either way —
+see [install.sh](install.sh) itself for exactly what it does and why),
+updates the system, installs `git`, pulls down this repo, and hands off to
+`privacyos.sh` automatically. If it tells you to log out and back in first
+(the sudo-fix case), do that, then just run `./install.sh` again from the
+same `~/Downloads` folder — it picks up right where it left off.
 
-Then:
+Prefer to do each step yourself instead of running a script you haven't
+read line by line first? Totally reasonable, and the point of this project
+is that you can — `install.sh` is short and plain, read it, then either run
+it as-is or do its steps by hand.
 
-```sh
-sudo apt install git -y
-git clone https://github.com/rjc3rd/PrivacyOS.git
-cd PrivacyOS
-./privacyos.sh --help
-./privacyos.sh
-```
-
-That first line matters on its own too — a stock Debian desktop, including
-the Cinnamon live image above, doesn't come with `git` installed by
-default. Safe to run even if you already have it (it just no-ops), but
-leaving it out is the single most likely reason this block would fail on a
-fresh install.
-
-Run it as your normal user, not root — it calls `sudo` itself wherever it
-needs to.
+Once you're inside the cloned repo, run it as your normal user, not
+root — it calls `sudo` itself wherever it needs to.
 
 Every optional choice is a command-line flag, so you can pre-decide exactly
 what you want (and script/document it, or eventually generate the command
 from a checkbox picker on `privacyos.dev`) instead of answering prompts.
 Anything you don't pass a flag for gets asked interactively — as a graphical
-dialog if available, a plain terminal prompt otherwise.
+dialog if available, a plain terminal prompt otherwise. `install.sh` passes
+any flags straight through to `privacyos.sh`, so `./install.sh --theme
+--dns=quad9` works the same as running that on `privacyos.sh` directly once
+you're inside the cloned repo.
 
 ```
 --dns=PROVIDER      quad9 (default) | nextdns | opendns | none
