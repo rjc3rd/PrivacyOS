@@ -75,6 +75,36 @@ specifically for a hardening project rather than being a knock on either:
     `apt update && apt upgrade` as its first real step regardless of which
     point release you installed from.
 
+## Encrypt the disk
+
+Do this during Debian's own installer, before `privacyos.sh` ever enters the
+picture — it's the one piece of real protection that has to happen at
+install time, not something the script can add afterward.
+
+**Full-disk encryption protects everything** — not just your personal
+files, but the operating system itself: browser caches, swap, temp files,
+system logs, all of it. Without it, someone with physical access to a
+powered-off machine (lost, stolen, seized, whatever) can just pull the
+drive and read everything on it directly. With it, none of that is
+readable without the passphrase, full stop.
+
+- **Using the Cinnamon live image** (the recommended path above, installed
+  via Calamares): when you get to partitioning, choose **Erase disk**, then
+  enable the **Encrypt system** option before continuing. LVM gets set up
+  underneath automatically as part of that same flow — nothing else to
+  configure.
+- **Using the netinst image** (the classic Debian installer): on the
+  **Partition disks** screen, choose **Guided – use entire disk and set up
+  encrypted LVM**.
+
+Either way, you'll be asked to set an encryption passphrase during this
+step. **Write it down somewhere safe before you forget it** — this isn't a
+login password, it's what makes the entire disk readable at all, asked for
+on every single boot before the system even starts. There is no recovery
+option and no "forgot password" flow. Lose the passphrase and everything on
+the disk is gone, permanently, by design — that's the same property that
+makes it real protection in the first place.
+
 ## Quick start
 
 ```sh
