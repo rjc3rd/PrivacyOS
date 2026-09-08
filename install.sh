@@ -1,20 +1,14 @@
 #!/usr/bin/env bash
 #
-# install.sh — the one file you actually need to fetch by hand. Everything
-# else, this handles: making sure you have sudo, updating the system,
-# installing git, pulling down the real PrivacyOS repo, and handing off to
-# privacyos.sh. See README.md for why it's built this way.
-#
-# Get this file with your browser (it's guaranteed present — Debian's own
-# live images ship one — unlike git/wget/curl, none of which can be
-# assumed installed), then from a terminal:
-#   chmod +x install.sh
-#   ./install.sh
+# install.sh — the one file you actually need to fetch by hand (see the
+# one-line curl command in README.md's Quick Start). Everything else, this
+# handles: making sure you have sudo, updating the system, pulling down the
+# real PrivacyOS repo, and handing off to privacyos.sh.
 #
 set -euo pipefail
 
-REPO_HTTPS="https://github.com/rjc3rd/PrivacyOS.git"
-REPO_DIR="PrivacyOS"
+REPO_TARBALL="https://github.com/rjc3rd/PrivacyOS/archive/refs/heads/main.tar.gz"
+REPO_DIR="PrivacyOS-main"
 
 log()  { printf '\n\033[1;32m[install]\033[0m %s\n' "$*"; }
 warn() { printf '\n\033[1;33m[install] warning:\033[0m %s\n' "$*" >&2; }
@@ -44,21 +38,25 @@ EOF
   exit 0
 fi
 
-# ---- system update + prerequisites ----
+# ---- system update + basic tools ----
 log "Updating package lists and upgrading installed packages..."
 sudo apt update -y
 sudo apt upgrade -y
 
-log "Installing git..."
-sudo apt install -y git
+log "Installing a basic set of tools..."
+# wget and gnupg specifically aren't optional -- privacyos.sh calls wget
+# and gpg internally (fetching blocklists/prefs, dearmoring repo keys) and
+# can't get past those steps without them. git and curl round out a
+# baseline toolset worth having on a system like this regardless of
+# whether privacyos.sh itself happens to need them today.
+sudo apt install -y wget gnupg git curl
 
 # ---- fetch the real repo and hand off ----
-if [[ -d "$REPO_DIR/.git" ]]; then
-  log "$REPO_DIR already exists — updating it instead of cloning fresh..."
-  git -C "$REPO_DIR" pull
+if [[ -d "$REPO_DIR" ]]; then
+  log "$REPO_DIR already exists here — using it as-is."
 else
-  log "Cloning $REPO_HTTPS..."
-  git clone "$REPO_HTTPS" "$REPO_DIR"
+  log "Downloading the PrivacyOS repo..."
+  curl -fsSL "$REPO_TARBALL" | tar xz
 fi
 
 cd "$REPO_DIR"

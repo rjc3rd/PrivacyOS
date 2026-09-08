@@ -107,38 +107,45 @@ makes it real protection in the first place.
 
 ## Quick start
 
-Nothing about what's actually installed on a fresh system can be assumed
-here — not `git`, not `wget`, not `curl`, and not even that your user has
-`sudo` access yet (depends on a choice made during Debian's own installer).
-The only thing guaranteed to be there is a **browser** — it's part of the
-live image itself — so that's the one manual step:
+Not everything can be assumed present on a fresh system — `git` and `wget`
+usually aren't, but `curl` reliably is. Everything happens from one
+terminal, starting with fetching the one file you actually need by hand:
 
-1. Open the browser, go to
-   [install.sh](https://raw.githubusercontent.com/rjc3rd/PrivacyOS/main/install.sh),
-   save it (`Ctrl+S` or right-click → Save Page As) to your Downloads
-   folder.
-2. Open a terminal:
-   ```sh
-   cd ~/Downloads
-   chmod +x install.sh
-   ./install.sh
-   ```
+```sh
+curl -fsSLO https://raw.githubusercontent.com/rjc3rd/PrivacyOS/main/install.sh
+chmod +x install.sh
+./install.sh
+```
 
-That one file handles everything else in order: checks whether your user
-has `sudo` yet and walks you through fixing it if not (safe either way —
-see [install.sh](install.sh) itself for exactly what it does and why),
-updates the system, installs `git`, pulls down this repo, and hands off to
-`privacyos.sh` automatically. If it tells you to log out and back in first
-(the sudo-fix case), do that, then just run `./install.sh` again from the
-same `~/Downloads` folder — it picks up right where it left off.
+`install.sh` and `privacyos.sh` do two different jobs, back to back.
+`install.sh` **prepares** the fresh Debian install for everything after
+it — makes sure your user actually has `sudo` (walking you through fixing
+it if not), gets the system fully updated, installs a basic set of tools
+(`wget`, `gnupg`, `git`, `curl` — `privacyos.sh` itself calls `wget` and
+`gpg` internally, so these aren't optional extras), and downloads this
+repo. None of that is PrivacyOS-specific; it's just what has to be true
+first. Once that's done, it hands off automatically to `privacyos.sh`,
+which is where the actual PrivacyOS install — hardening, browsers,
+everything this README describes below — happens. If `install.sh` tells you to log out and back in
+first (the sudo-fix case), do that, then run `./install.sh` again from the
+same directory — it picks up right where it left off, it won't re-download
+what's already there.
 
 Prefer to do each step yourself instead of running a script you haven't
 read line by line first? Totally reasonable, and the point of this project
 is that you can — `install.sh` is short and plain, read it, then either run
-it as-is or do its steps by hand.
+it as-is or do its steps by hand. `git clone` works fine too if you'd
+rather use that (e.g. you're planning to contribute back) — same repo,
+`https://github.com/rjc3rd/PrivacyOS.git`.
 
-Once you're inside the cloned repo, run it as your normal user, not
-root — it calls `sudo` itself wherever it needs to.
+Once you're in, run it as your normal user, not root — it calls `sudo`
+itself wherever it needs to.
+
+Before it changes anything, `privacyos.sh` asks you to type `yes` to
+confirm this is actually a fresh install — same pattern installers like
+ISPConfig's use, on purpose: this reconfigures package sources, installed
+software, `/etc/hosts`, and browser profiles, and it's built for a machine
+with nothing on it you care about yet, not one you're already using.
 
 Every optional choice is a command-line flag, so you can pre-decide exactly
 what you want (and script/document it, or eventually generate the command

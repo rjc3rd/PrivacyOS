@@ -117,6 +117,37 @@ require_debian_trixie() {
   fi
 }
 
+confirm_fresh_install() {
+  # Same pattern ISPConfig's own installer uses for exactly this reason:
+  # this reconfigures a lot, it's built for a machine with nothing on it
+  # you care about yet, and a typed "yes" (not a y/N keypress, not a GUI
+  # button) is a deliberately higher bar for a genuinely consequential
+  # confirmation — easy to fat-finger a click, harder to type the wrong
+  # word by accident.
+  if [[ "$NONINTERACTIVE" == "yes" ]]; then
+    warn "Skipping the fresh-install confirmation because of --yes — make sure that's really what you meant."
+    return
+  fi
+  cat <<'EOF'
+
+==============================================================================
+ This script reconfigures a lot: package sources, installed packages,
+ /etc/hosts, browser profiles, and more.
+
+ It's built for a FRESH Debian install — a machine with nothing on it you
+ care about yet. Running it on a system you're already using, with real
+ data or configuration you don't want touched, is not supported and can
+ change or remove things you didn't expect.
+
+ If that's this machine, stop now.
+==============================================================================
+
+EOF
+  local reply
+  read -r -p "Type 'yes' to confirm this is a fresh install you're OK with changing: " reply
+  [[ "$reply" == "yes" ]] || die "Not confirmed — exiting without changing anything."
+}
+
 keep_sudo_alive() {
   sudo -v || die "This script needs sudo access."
   ( while true; do sudo -n true; sleep 60; kill -0 "$$" 2>/dev/null || exit; done ) &
@@ -636,6 +667,7 @@ main() {
   parse_args "$@"
   require_not_root
   require_debian_trixie
+  confirm_fresh_install
   keep_sudo_alive
   ensure_prompt_backend
   resolve_interactive_choices
