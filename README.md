@@ -232,6 +232,11 @@ dialog if available, a plain terminal prompt otherwise. E.g.
   [Onion Browser Button](https://addons.mozilla.org/en-US/firefox/addon/tortm-browser-button/) (see note below),
   [Port Authority](https://addons.mozilla.org/en-US/firefox/addon/port-authority/),
   [SponsorBlock for YouTube](https://addons.mozilla.org/en-US/firefox/addon/sponsorblock/).
+- Sets LibreWolf as the system default browser, and adds
+  [ProxySearch.org](https://proxysearch.org) as an available *and* default
+  search engine in Firefox, Waterfox, and LibreWolf — see
+  [Default browser and search engine](#default-browser-and-search-engine)
+  below.
 - Sets the hostname to `privacyos`.
 - Finishes with `apt update && apt upgrade` and a reboot.
 
@@ -323,6 +328,26 @@ and for un-blocking something StevenBlack catches that you actually need.
   Firefox-based browser, Settings → Network Settings → Manual proxy
   configuration → SOCKS Host `127.0.0.1`, Port `9050`, SOCKS v5 — that's
   the entire mechanism, one click or typed in by hand.
+
+## Default browser and search engine
+
+- **LibreWolf is set as the system default browser** (`xdg-settings set
+  default-web-browser librewolf.desktop`) — it's the browser this project
+  hardens the most conservatively (its own upstream defaults, not layered
+  Arkenfox/Betterfox), so it's the one meant for everyday use. Skipped
+  automatically if you installed with `--no-librewolf`.
+- **[ProxySearch.org](https://proxysearch.org)** — a privacy-respecting meta
+  search engine — is added as an available search engine and set as the
+  *default* in Firefox, Waterfox, and LibreWolf, via each browser's
+  `policies.json`. None of the built-in engines (Google, DuckDuckGo, etc.)
+  are removed — ProxySearch is just what a fresh search starts with; switch
+  back to any of them in Settings → Search any time.
+- **The "make this your default browser" startup nag is suppressed** on
+  Firefox and Waterfox (`browser.shell.checkDefaultBrowser` set to `false`
+  in `overrides-user.js`) — there's no need for either to keep asking when
+  LibreWolf is already set as the actual default. LibreWolf never showed
+  this prompt in the first place (`DontCheckDefaultBrowser` is already part
+  of its own upstream `policies.json`, reproduced as-is here).
 
 ## DNS resolver options
 

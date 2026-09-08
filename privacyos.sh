@@ -519,12 +519,12 @@ CUSTOM_HOSTS_EOF
     cat > "$PRIVACYOS_CONFIG_DIR/overrides-user.js" <<'OVERRIDES_EOF'
 // PrivacyOS overrides-user.js
 //
-// Applied on top of Arkenfox + Betterfox (Firefox/Waterfox), or by itself
-// on LibreWolf (which already hardens its own defaults heavily — layering
-// the full Arkenfox/Betterfox set on it risks fighting settings it made
-// on purpose). This file is intentionally small: a starting point, not a
-// complete hardening profile — that's what Arkenfox/Betterfox already
-// are. Add to it as real usage turns up more.
+// Applied on top of Arkenfox + Betterfox (Firefox/Waterfox), or by itself on
+// LibreWolf (which already hardens its own defaults heavily — layering the
+// full Arkenfox/Betterfox set on it risks fighting settings it made on
+// purpose). This file is intentionally small: a starting point, not a
+// complete hardening profile — that's what Arkenfox/Betterfox already are.
+// Add to it as real usage turns up more.
 
 // Turn off Firefox Sync / accounts prompts — this project doesn't want
 // browser profiles phoning home to a Mozilla account by default.
@@ -533,6 +533,13 @@ user_pref("identity.fxaccounts.enabled", false);
 // Pocket is a third-party save-for-later service wired into the UI by
 // default — no reason for it to be on in a privacy-first browser.
 user_pref("extensions.pocket.enabled", false);
+
+// Suppress the "make this your default browser" startup nag. LibreWolf is
+// set as the actual system default by privacyos.sh itself (see
+// set_default_browser()), so Firefox and Waterfox don't need to keep
+// asking. Redundant on LibreWolf — its own policies.json already sets
+// DontCheckDefaultBrowser — but harmless to also set here.
+user_pref("browser.shell.checkDefaultBrowser", false);
 OVERRIDES_EOF
   fi
 }
@@ -662,6 +669,19 @@ configure_extensions() {
         "install_url": "https://addons.mozilla.org/firefox/downloads/latest/sponsorblock/latest.xpi",
         "installation_mode": "force_installed"
       }
+    },
+    "SearchEngines": {
+      "Add": [
+        {
+          "Name": "ProxySearch",
+          "URLTemplate": "https://proxysearch.org/search.php?q={searchTerms}",
+          "Method": "GET",
+          "IconURL": "https://proxysearch.org/favicon.svg",
+          "Alias": "ps",
+          "Description": "Privacy-respecting meta search — proxysearch.org"
+        }
+      ],
+      "Default": "ProxySearch"
     }
   }
 }
@@ -704,6 +724,19 @@ JSON
         "install_url": "https://addons.mozilla.org/firefox/downloads/latest/sponsorblock/latest.xpi",
         "installation_mode": "force_installed"
       }
+    },
+    "SearchEngines": {
+      "Add": [
+        {
+          "Name": "ProxySearch",
+          "URLTemplate": "https://proxysearch.org/search.php?q={searchTerms}",
+          "Method": "GET",
+          "IconURL": "https://proxysearch.org/favicon.svg",
+          "Alias": "ps",
+          "Description": "Privacy-respecting meta search — proxysearch.org"
+        }
+      ],
+      "Default": "ProxySearch"
     }
   }
 }
@@ -789,6 +822,19 @@ JSON
         "LocalNetworkAccess": { "Enabled": true, "BlockTrackers": true, "EnablePrompting": true },
         "NoDefaultBookmarks": true,
         "OverridePostUpdatePage": "",
+        "SearchEngines": {
+            "Add": [
+                {
+                    "Name": "ProxySearch",
+                    "URLTemplate": "https://proxysearch.org/search.php?q={searchTerms}",
+                    "Method": "GET",
+                    "IconURL": "https://proxysearch.org/favicon.svg",
+                    "Alias": "ps",
+                    "Description": "Privacy-respecting meta search — proxysearch.org"
+                }
+            ],
+            "Default": "ProxySearch"
+        },
         "SkipTermsOfUse": true,
         "SupportMenu": { "Title": "LibreWolf Issue Tracker", "URL": "https://codeberg.org/librewolf/issues" },
         "UserMessaging": {
@@ -800,6 +846,24 @@ JSON
   fi
 
   warn "policies.json paths are unconfirmed on real hardware — verify the extensions actually appear after first launch, per browser."
+  warn "SearchEngines (ProxySearch as default) is also unconfirmed on real hardware — verify each browser actually offers/defaults to it after first launch."
+}
+
+set_default_browser() {
+  if [[ "$WANT_LIBREWOLF" != "yes" ]]; then
+    return
+  fi
+  log "Setting LibreWolf as the default browser..."
+  # xdg-settings (from xdg-utils) is the standard, desktop-environment-aware
+  # way to do this -- it updates ~/.config/mimeapps.list itself. Confirmed
+  # via LibreWolf's own Debian packaging (gitlab.com/librewolf-community/
+  # browser/linux) that the native .deb installs its desktop file as
+  # librewolf.desktop under /usr/share/applications -- not the Flatpak ID
+  # (io.gitlab.librewolf-community.desktop), which doesn't apply here since
+  # this project only ever installs the native apt package.
+  apt_install xdg-utils
+  xdg-settings set default-web-browser librewolf.desktop \
+    || warn "Couldn't set LibreWolf as the default browser automatically — set it manually in Cinnamon's Preferred Applications if it matters to you."
 }
 
 install_theme_extras() {
@@ -939,6 +1003,72 @@ UPGRADE_EOF
   # works as ~/.local/bin/upgrade, just not bare by name.
 }
 
+install_welcome_message() {
+  log "Setting up the first-login welcome message..."
+  mkdir -p "$HOME/.local/bin" "$HOME/.config/autostart"
+
+  # A real script file, same pattern as `upgrade` above, rather than
+  # cramming this into the .desktop file's Exec= line directly — avoids
+  # fighting Desktop Entry Spec quoting/escaping for a multi-paragraph
+  # message. Nested heredoc (this script's own zenity call) is the same
+  # pattern already used for `upgrade`'s embed above — proven to work.
+  cat > "$HOME/.local/bin/privacyos-welcome" <<'WELCOME_SCRIPT_EOF'
+#!/usr/bin/env bash
+# privacyos-welcome — one-time summary of what privacyos.sh actually
+# hardened, shown on first login after the install finishes. Runs via
+# XDG autostart (~/.config/autostart/); the marker file below is what
+# keeps this to showing exactly once. Delete the marker to see it again.
+set -euo pipefail
+marker="$HOME/.config/privacyos/.welcome-shown"
+if [[ -f "$marker" ]]; then exit 0; fi
+command -v zenity >/dev/null 2>&1 || exit 0
+
+zenity --text-info --title="Welcome to PrivacyOS" --width=600 --height=500 <<'MSG_EOF'
+Welcome to PrivacyOS
+
+Your system has been hardened. Most of this isn't visible at a glance, so here's a plain summary of what actually changed.
+
+BROWSERS
+LibreWolf (your primary browser), Firefox, and Waterfox all got hardened preferences (Arkenfox + Betterfox, or LibreWolf's own strong defaults) plus a curated set of privacy extensions: an ad/tracker blocker, a URL cleaner, Google link-tracking removal, password manager integration, and a few more. Tor Browser is installed for real Tor browsing. Chromium is kept deliberately bare, no extensions - it's there on purpose, an isolated fallback for the rare site that needs it, kept separate from your real browsing identity.
+
+DNS AND NETWORK
+DNS queries go out encrypted, through Quad9, instead of in the clear through your ISP. RiseupVPN and Tor are both installed and ready whenever you want them.
+
+AD AND TRACKER BLOCKING
+/etc/hosts was rebuilt from the StevenBlack blocklist plus anything in your own custom.hosts file.
+
+PASSWORDS AND PACKET CAPTURE
+KeePassXC is installed with its browser extension wired in. Wireshark works for your user without needing sudo - that's already set up.
+
+SECURE DELETE
+Right-click any file or folder in the Nemo file manager, look for "Scripts" in the menu, then "Secure-Delete" inside it. That overwrites and deletes it for good, not just to the trash.
+
+KEEPING IT CURRENT
+Run "upgrade" in a terminal any time - it updates the system, cleans out old kernels, and refreshes the hosts list and browser hardening, all in one command.
+
+Read privacyos.sh itself any time to see exactly what was done - nothing here is hidden.
+
+(This won't show again. Delete ~/.config/privacyos/.welcome-shown if you ever want to see it once more.)
+MSG_EOF
+
+mkdir -p "$(dirname "$marker")"
+touch "$marker"
+WELCOME_SCRIPT_EOF
+  chmod +x "$HOME/.local/bin/privacyos-welcome"
+
+  # $HOME expanded now, into the file, since privacyos.sh already knows
+  # the real path — sidesteps any ambiguity about whether Desktop Entry
+  # Spec parsing would expand $HOME itself at launch time (it doesn't).
+  cat > "$HOME/.config/autostart/privacyos-welcome.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=PrivacyOS Welcome
+Exec=$HOME/.local/bin/privacyos-welcome
+X-GNOME-Autostart-enabled=true
+NoDisplay=true
+EOF
+}
+
 set_hostname() {
   log "Setting hostname to 'privacyos'..."
   echo privacyos | sudo tee /etc/hostname > /dev/null
@@ -978,6 +1108,7 @@ main() {
   build_hosts_blocklist
   harden_browsers
   configure_extensions
+  set_default_browser
   # The most serious instance of this whole bug class: declining theme
   # (the recommended default!) would have silently ended the entire
   # script right here under the old "[[ ]] && fn" form -- never setting
@@ -985,6 +1116,7 @@ main() {
   if [[ "$WANT_THEME" == "yes" ]]; then install_theme_extras; fi
   if [[ "$WANT_APPS"  == "yes" ]]; then install_apps_extras; fi
   install_upgrade_command
+  install_welcome_message
   set_hostname
   final_update_and_reboot
 }
