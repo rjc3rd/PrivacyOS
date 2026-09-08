@@ -632,8 +632,47 @@ resolve_profile_root() {
   fi
 }
 
+# rename_profile_entry <profile_root> <ini> <old_name> <new_name>
+#
+# Renames one profile: moves its folder, then rewrites Name=/Path= for the
+# ONE [ProfileN] block whose Path= matches old_name -- every other block in
+# the file (there's normally exactly one other, see
+# bootstrap_and_rename_profile below) is left completely untouched. Doesn't
+# touch Default= anywhere -- callers handle that separately, since it means
+# something different in each place: the [InstallXXXX] section's Default=
+# is the real "which profile does this install actually use" pointer, while
+# a [ProfileN] block's own Default=1 is just an old, mostly-inert leftover
+# flag from before that section existed. Shared by
+# bootstrap_and_rename_profile for both the profile it makes the active one
+# and the second profile every browser here creates alongside it -- same
+# safe, tested operation, not two different ones.
+rename_profile_entry() {
+  local profile_root="$1" ini="$2" old_name="$3" new_name="$4"
+  [[ "$old_name" == "$new_name" ]] && return 0
+  mv "$profile_root/$old_name" "$profile_root/$new_name" 2>/dev/null || return 1
+  awk -v old="$old_name" -v new="$new_name" '
+    function flush_buffer(   i, line) {
+      for (i = 1; i <= n; i++) {
+        line = buf[i]
+        if (is_target) {
+          if (line ~ /^Name=/) line = "Name=" new
+          if (line ~ /^Path=/) line = "Path=" new
+        }
+        print line
+      }
+      n = 0
+      is_target = 0
+    }
+    /^\[Profile/ { flush_buffer(); in_profile=1; n=0; buf[++n]=$0; next }
+    /^\[/        { flush_buffer(); in_profile=0; print; next }
+    in_profile   { buf[++n]=$0; if ($0 == "Path=" old) is_target=1; next }
+    { print }
+    END { flush_buffer() }
+  ' "$ini" > "$ini.new" && mv "$ini.new" "$ini"
+}
+
 bootstrap_and_rename_profile() {
-  local browser_cmd="$1" profile_root="$2" user_js_source="$3" new_name="$4"
+  local browser_cmd="$1" profile_root="$2" user_js_source="$3" new_name="$4" second_name="$5"
   command -v "$browser_cmd" >/dev/null 2>&1 || return
 
   timeout 20 "$browser_cmd" --headless >/dev/null 2>&1 &
@@ -682,45 +721,48 @@ bootstrap_and_rename_profile() {
   # destroyed by that failure (mv errors out before touching anything), but
   # the refresh would have quietly stopped working.
   if [[ "$old_name" != "$new_name" ]]; then
-    if ! mv "$profile_root/$old_name" "$profile_root/$new_name" 2>/dev/null; then
+    if ! rename_profile_entry "$profile_root" "$ini" "$old_name" "$new_name"; then
       warn "Couldn't rename $browser_cmd's profile folder -- skipping its hardening this run."
       return
     fi
-    # Scoped specifically to the [InstallXXXX] section's own Default= line
-    # and the one [ProfileN] block whose Path= matches $old_name -- NOT a
-    # blanket "rewrite every Default=/Name=/Path= line in the file". Real
-    # bug, found via real testing: every browser here normally creates a
-    # SECOND, unrelated legacy-format profile block alongside the real one
-    # (confirmed on all three, not just Waterfox -- see CLAUDE.md). A
-    # blanket rewrite stomped that second block's Name=/Path=/Default=1
-    # too, overwriting its legacy boolean Default=1 flag into the literal
-    # text "Default=PrivacyOS" and making it falsely claim the same Path=
-    # as the real profile -- harmless in practice (nothing reads that
-    # block on a normal launch) but genuinely corrupted, misleading data
-    # sitting in a file that's supposed to be trustworthy.
-    awk -v old="$old_name" -v new="$new_name" '
-      function flush_buffer(   i, line) {
-        for (i = 1; i <= n; i++) {
-          line = buf[i]
-          if (is_target) {
-            if (line ~ /^Name=/) line = "Name=" new
-            if (line ~ /^Path=/) line = "Path=" new
-          }
-          print line
-        }
-        n = 0
-        is_target = 0
-      }
-      /^\[Install/ { flush_buffer(); print; in_install=1; in_profile=0; next }
-      /^\[Profile/ { flush_buffer(); in_install=0; in_profile=1; n=0; buf[++n]=$0; next }
-      /^\[/        { flush_buffer(); in_install=0; in_profile=0; print; next }
+    # The [InstallXXXX] section's Default= is the real "which profile does
+    # this install use" pointer -- handled separately from
+    # rename_profile_entry's Name=/Path= rewrite above, and scoped the same
+    # way: only that one section's Default= line, never anything else in
+    # the file.
+    awk -v new="$new_name" '
+      /^\[Install/ { print; in_install=1; next }
+      /^\[/ { in_install=0 }
       in_install && /^Default=/ { print "Default=" new; next }
-      in_profile   { buf[++n]=$0; if ($0 == "Path=" old) is_target=1; next }
       { print }
-      END { flush_buffer() }
     ' "$ini" > "$ini.new" && mv "$ini.new" "$ini" \
-      || warn "Renamed $browser_cmd's profile folder but couldn't update profiles.ini to match -- it may not be found correctly."
+      || warn "Renamed $browser_cmd's profile folder but couldn't update its Default= entry -- it may not be found correctly."
   fi
+
+  # Every browser here creates a second, real profile folder alongside the
+  # one it actually uses -- confirmed on all three, every run, not
+  # occasional (see CLAUDE.md). Give it a fixed name too, same reasoning
+  # and same safe, already-proven rename_profile_entry as the real one --
+  # not new logic, the same tested operation applied a second time. Purely
+  # cosmetic (nothing reads this profile on a normal launch), so a failure
+  # here just warns rather than affecting anything else in this run.
+  if [[ -n "$second_name" ]]; then
+    local second_old
+    second_old="$(awk -v skip="$new_name" '
+      /^\[Profile/ { in_profile=1; path=""; next }
+      /^\[/ {
+        if (in_profile && path != "" && path != skip) { print path; found=1; exit }
+        in_profile=0
+      }
+      in_profile && /^Path=/ { sub(/^Path=/, ""); path=$0 }
+      END { if (!found && in_profile && path != "" && path != skip) print path }
+    ' "$ini")" || true
+    if [[ -n "$second_old" && -d "$profile_root/$second_old" ]]; then
+      rename_profile_entry "$profile_root" "$ini" "$second_old" "$second_name" \
+        || warn "Couldn't rename $browser_cmd's second profile folder -- cosmetic only, nothing else affected."
+    fi
+  fi
+
   cp "$user_js_source" "$profile_root/$new_name/user.js" \
     || warn "Couldn't copy hardened preferences into $browser_cmd's profile."
 }
@@ -743,15 +785,15 @@ harden_browsers() {
   if [[ "$WANT_LIBREWOLF" == "yes" ]]; then
     bootstrap_and_rename_profile librewolf \
       "$(resolve_profile_root "$HOME/.librewolf" "librewolf/librewolf")" \
-      "$overrides" PrivacyOS
+      "$overrides" PrivacyOS PrivacyOS-default
   fi
   if [[ "$WANT_FIREFOX" == "yes" ]]; then
     bootstrap_and_rename_profile firefox \
       "$(resolve_profile_root "$HOME/.mozilla/firefox" "mozilla/firefox")" \
-      "$workdir/full-user.js" PrivacyOS
+      "$workdir/full-user.js" PrivacyOS PrivacyOS-default
   fi
   if [[ "$WANT_WATERFOX" == "yes" ]]; then
-    bootstrap_and_rename_profile waterfox "$HOME/.waterfox" "$workdir/full-user.js" PrivacyOS
+    bootstrap_and_rename_profile waterfox "$HOME/.waterfox" "$workdir/full-user.js" PrivacyOS PrivacyOS-edition-default
   fi
 
   rm -rf "$workdir"
