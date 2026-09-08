@@ -603,6 +603,35 @@ build_hosts_blocklist() {
 # browsers before being scripted here: zero orphaned duplicate profiles, and
 # on Waterfox specifically, a real profile with real bookmarks survived the
 # round-trip intact.
+# resolve_profile_root <legacy_path> <xdg_relative_path>
+#
+# Firefox 147+ (confirmed: this project's own Debian-repo build is well past
+# that) added real XDG Base Directory support -- defaults to
+# $XDG_CONFIG_HOME/mozilla (normally ~/.config/mozilla) instead of
+# ~/.mozilla, but ONLY when ~/.mozilla doesn't already exist, for backward
+# compatibility with existing installs. LibreWolf matches:
+# ~/.config/librewolf/librewolf instead of ~/.librewolf. Confirmed the hard
+# way -- a long real-hardware debugging session that started out looking
+# like a genuine Gecko headless-mode bug (it wasn't) before a broad
+# filesystem search turned up real, successfully-created profiles sitting at
+# these paths the whole time, on a genuinely fresh VM with no prior
+# ~/.mozilla or ~/.librewolf to trigger the legacy fallback. Mirrors that
+# same resolution rule here instead of hardcoding either path, so this
+# keeps resolving correctly regardless of which one a given install/browser-
+# version combination actually uses. Deliberately NOT applied to Waterfox:
+# confirmed via the same search that it's still on the legacy path only,
+# and there's no verified evidence of what its XDG path would even be if it
+# ever adopts this -- not guessing at an unverified path after this exact
+# session.
+resolve_profile_root() {
+  local legacy_path="$1" xdg_relative="$2"
+  if [[ -d "$legacy_path" ]]; then
+    echo "$legacy_path"
+  else
+    echo "${XDG_CONFIG_HOME:-$HOME/.config}/$xdg_relative"
+  fi
+}
+
 bootstrap_and_rename_profile() {
   local browser_cmd="$1" profile_root="$2" user_js_source="$3" new_name="$4"
   command -v "$browser_cmd" >/dev/null 2>&1 || return
@@ -619,11 +648,23 @@ bootstrap_and_rename_profile() {
     return
   fi
 
-  # The install-hash section's Default= line names whatever random-salt
+  # The [InstallXXXX] section's own Default= line names whatever random-salt
   # folder the browser just generated for itself -- read that back rather
-  # than assume a naming pattern.
+  # than assume a naming pattern. Deliberately scoped to inside that specific
+  # section, not just "the first line starting with Default= anywhere in the
+  # file": confirmed via real hardware that Waterfox's fresh bootstrap always
+  # writes a second, legacy-format profile block (from before the
+  # [InstallXXXX] indirection existed) with its own "Default=1" flag that can
+  # appear *before* the real one in the file -- an unscoped grab picked up
+  # that "1" instead of the real folder name every time, which safely failed
+  # the directory-exists check below rather than doing anything destructive,
+  # but meant Waterfox's profile never actually got renamed.
   local old_name
-  old_name="$(sed -n 's/^Default=//p' "$ini" | head -n1)" || true
+  old_name="$(awk '
+    /^\[Install/ { in_install=1; next }
+    /^\[/ { in_install=0 }
+    in_install && /^Default=/ { sub(/^Default=/, ""); print; exit }
+  ' "$ini")" || true
   if [[ -z "$old_name" || ! -d "$profile_root/$old_name" ]]; then
     warn "Couldn't identify $browser_cmd's freshly-created profile -- skipping its hardening this run."
     return
@@ -668,10 +709,14 @@ harden_browsers() {
   # Arkenfox/Betterfox set on top risks fighting settings it already made
   # deliberately. Give it just the project's own small overrides instead.
   if [[ "$WANT_LIBREWOLF" == "yes" ]]; then
-    bootstrap_and_rename_profile librewolf "$HOME/.librewolf" "$overrides" PrivacyOS
+    bootstrap_and_rename_profile librewolf \
+      "$(resolve_profile_root "$HOME/.librewolf" "librewolf/librewolf")" \
+      "$overrides" PrivacyOS
   fi
   if [[ "$WANT_FIREFOX" == "yes" ]]; then
-    bootstrap_and_rename_profile firefox "$HOME/.mozilla/firefox" "$workdir/full-user.js" PrivacyOS
+    bootstrap_and_rename_profile firefox \
+      "$(resolve_profile_root "$HOME/.mozilla/firefox" "mozilla/firefox")" \
+      "$workdir/full-user.js" PrivacyOS
   fi
   if [[ "$WANT_WATERFOX" == "yes" ]]; then
     bootstrap_and_rename_profile waterfox "$HOME/.waterfox" "$workdir/full-user.js" PrivacyOS
