@@ -22,6 +22,13 @@
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
+# Persistent home for custom.hosts/overrides-user.js, independent of wherever
+# this script itself is run from — the cloned repo folder might not exist
+# anymore by the time `upgrade` needs these later, so they're copied here
+# once (without clobbering any edits already made here) and read from here
+# from then on, by both this script and `upgrade`.
+readonly PRIVACYOS_CONFIG_DIR="$HOME/.config/privacyos"
+
 # ============================================================
 # Defaults — "" means "not decided yet, ask interactively"
 # ============================================================
@@ -175,7 +182,15 @@ apt_update()  { sudo apt-get update; }
 apt_upgrade() { sudo apt-get upgrade -y; }
 apt_install() { sudo apt-get install -y "$@"; }
 apt_purge()   { sudo apt-get remove --purge -y "$@" || warn "Some packages in that purge list weren't installed — that's fine, continuing."; }
-apt_cleanup() { sudo apt-get clean -y; sudo apt-get autoclean -y; sudo apt-get autoremove --purge -y; }
+purge_old_kernels() {
+  # Every apt_upgrade that includes a new kernel leaves the old one behind —
+  # autoremove alone doesn't always catch these. Never touches the kernel
+  # actually running right now.
+  dpkg -l 'linux-image-[0-9]*' 'linux-headers-[0-9]*' 2>/dev/null | awk '/^ii/{print $2}' \
+    | grep -v -- "$(uname -r | cut -f1,2 -d'-')" | grep -e '[0-9]' \
+    | xargs -r sudo apt-get -y purge
+}
+apt_cleanup() { purge_old_kernels; sudo apt-get clean -y; sudo apt-get autoclean -y; sudo apt-get autoremove --purge -y; }
 
 # ============================================================
 # Sections
@@ -305,6 +320,16 @@ configure_dns() {
   warn "DNS config is a first pass — verify 'resolvectl status' shows it after reboot; network-manager interactions can vary by hardware."
 }
 
+init_config_dir() {
+  mkdir -p "$PRIVACYOS_CONFIG_DIR"
+  local repo_dir
+  repo_dir="$(dirname "$0")"
+  # Copy in the bundled defaults only if they're not already there — a
+  # second run (or `upgrade` later) must never clobber edits made here.
+  [[ -f "$PRIVACYOS_CONFIG_DIR/custom.hosts" ]] || cp "$repo_dir/custom.hosts" "$PRIVACYOS_CONFIG_DIR/custom.hosts" 2>/dev/null || true
+  [[ -f "$PRIVACYOS_CONFIG_DIR/overrides-user.js" ]] || cp "$repo_dir/overrides-user.js" "$PRIVACYOS_CONFIG_DIR/overrides-user.js" 2>/dev/null || true
+}
+
 build_hosts_blocklist() {
   log "Building /etc/hosts from the StevenBlack list + your own custom.hosts..."
   # Deliberately just one blocklist source, not a stack of them. Stacking
@@ -318,11 +343,11 @@ build_hosts_blocklist() {
   : > "$workdir/hosts.new"
   printf '127.0.0.1 localhost\n127.0.1.1 privacyos\n::1 localhost ip6-localhost ip6-loopback\n\n' >> "$workdir/hosts.new"
 
-  # custom.hosts (shipped in this repo, next to the script) is never
-  # downloaded — it's the place to hand-add your own entries. Merged in
-  # first, same as the old script's .PrivacyOS.hosts did.
-  local custom_hosts
-  custom_hosts="$(dirname "$0")/custom.hosts"
+  # custom.hosts lives in $PRIVACYOS_CONFIG_DIR (not next to the script —
+  # see init_config_dir) so it survives even if the cloned repo folder gets
+  # deleted later. Never downloaded — it's the place to hand-add your own
+  # entries. Merged in first, same as the old script's .PrivacyOS.hosts did.
+  local custom_hosts="$PRIVACYOS_CONFIG_DIR/custom.hosts"
   [[ -f "$custom_hosts" ]] && cat "$custom_hosts" >> "$workdir/hosts.new"
 
   if wget -qO- https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts >> "$workdir/hosts.new" 2>/dev/null; then
@@ -343,7 +368,8 @@ harden_browsers() {
     || warn "couldn't fetch Arkenfox user.js"
   wget -qO "$workdir/betterfox-user.js" https://raw.githubusercontent.com/yokoffing/Betterfox/main/user.js \
     || warn "couldn't fetch Betterfox user.js"
-  cat "$workdir"/arkenfox-user.js "$workdir"/betterfox-user.js "$(dirname "$0")/overrides-user.js" \
+  local overrides="$PRIVACYOS_CONFIG_DIR/overrides-user.js"
+  cat "$workdir"/arkenfox-user.js "$workdir"/betterfox-user.js "$overrides" \
     > "$workdir/full-user.js" 2>/dev/null || cat "$workdir"/arkenfox-user.js "$workdir"/betterfox-user.js > "$workdir/full-user.js"
 
   # LibreWolf already hardens its own defaults heavily — layering the full
@@ -352,7 +378,7 @@ harden_browsers() {
   if [[ "$WANT_LIBREWOLF" == "yes" ]]; then
     local profile_dir
     profile_dir="$(find "$HOME/.librewolf" -maxdepth 1 -name '*.default*' 2>/dev/null | head -n1)"
-    [[ -n "$profile_dir" ]] && cp "$(dirname "$0")/overrides-user.js" "$profile_dir/user.js" 2>/dev/null || true
+    [[ -n "$profile_dir" ]] && cp "$overrides" "$profile_dir/user.js" 2>/dev/null || true
   fi
   for browser_home in "$HOME/.mozilla/firefox" "$HOME/.waterfox"; do
     local profile_dir
@@ -577,6 +603,16 @@ install_apps_extras() {
     mintstick dconf-editor gnome-clocks
 }
 
+install_upgrade_command() {
+  log "Installing the 'upgrade' command..."
+  mkdir -p "$HOME/.local/bin"
+  cp "$(dirname "$0")/upgrade" "$HOME/.local/bin/upgrade"
+  chmod +x "$HOME/.local/bin/upgrade"
+  # ~/.local/bin is on PATH by default on Debian (added via the standard
+  # skel .profile) — if it somehow isn't for this user, `upgrade` still
+  # works as ~/.local/bin/upgrade, just not bare by name.
+}
+
 set_hostname() {
   log "Setting hostname to 'privacyos'..."
   echo privacyos | sudo tee /etc/hostname > /dev/null
@@ -603,6 +639,7 @@ main() {
   keep_sudo_alive
   ensure_prompt_backend
   resolve_interactive_choices
+  init_config_dir
 
   configure_sources_list
   purge_bloat
@@ -614,6 +651,7 @@ main() {
   configure_extensions
   [[ "$WANT_THEME" == "yes" ]] && install_theme_extras
   [[ "$WANT_APPS"  == "yes" ]] && install_apps_extras
+  install_upgrade_command
   set_hostname
   final_update_and_reboot
 }

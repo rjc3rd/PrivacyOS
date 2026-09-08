@@ -38,16 +38,26 @@ specifically for a hardening project rather than being a knock on either:
 ## Requirements
 
 - A fresh install of **Debian 13 (Trixie)** with the **Cinnamon** desktop
-  already installed (`sudo apt install task-cinnamon-desktop`, or select it
-  in Debian's own installer). This is a real requirement, not a suggestion —
-  the Nemo file-manager integration and the bloat-purge list are both
-  written specifically for what a Cinnamon install includes. Other desktops
-  aren't supported.
+  already installed. This is a real requirement, not a suggestion — the
+  Nemo file-manager integration and the bloat-purge list are both written
+  specifically for what a Cinnamon install includes. Other desktops aren't
+  supported.
+- Easiest way to get there: Debian publishes an official **live image with
+  Cinnamon already on it**, installed via Calamares (the same graphical
+  installer Linux Mint itself uses) — boot it, connect to Wi-Fi through its
+  normal desktop applet if you need to, install to disk from there. No
+  separate desktop-selection step, no `apt install` afterward.
 - This project is currently verified against **Debian 13.6.0**, released
   2026-07-11.
-  - Installer: [debian-13.6.0-amd64-netinst.iso](https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/) (~755 MB)
-  - Checksums: `SHA256SUMS` / `SHA256SUMS.sign` in the same directory — verify
-    before you install.
+  - Cinnamon live image:
+    [debian-live-13.6.0-amd64-cinnamon.iso](https://cdimage.debian.org/debian-cd/13.6.0-live/amd64/iso-hybrid/) (~3.8 GB)
+  - Prefer a minimal/manual install instead? The plain
+    [debian-13.6.0-amd64-netinst.iso](https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/) (~755 MB)
+    works too — just make sure to select Cinnamon in the installer's software
+    selection screen (or run `sudo apt install task-cinnamon-desktop`
+    afterward if you didn't).
+  - Checksums: `SHA256SUMS`/`SHA512SUMS` (+ `.sign` files) sit in the same
+    directory as whichever image you pick — verify before you install.
   - A frozen copy of this exact point release (rather than "whatever's
     current") lives at `cdimage.debian.org/cdimage/archive/13.6.0/`.
   - Newer Debian point releases should work fine — this project is pinned to
@@ -234,6 +244,22 @@ and for un-blocking something StevenBlack catches that you actually need.
 (Mullvad's public DNS service was considered but is being shut down by
 Mullvad itself, with users migrated to Quad9 — not included here for that
 reason.)
+
+## Staying up to date
+
+Installing drops an `upgrade` command into `~/.local/bin/` (already on your
+`PATH`) — run it whenever you'd otherwise run `apt update && apt upgrade` by
+hand. It asks for your sudo password once, then: upgrades all packages,
+removes old kernels that pile up along the way, cleans up, rebuilds
+`/etc/hosts` from a fresh StevenBlack list plus your `custom.hosts`, and
+rebuilds Firefox/Waterfox/LibreWolf's hardened preferences from a fresh
+Arkenfox + Betterfox. One command, meant to become part of your normal
+routine rather than something you reach for occasionally.
+
+Your own additions — `custom.hosts` and `overrides-user.js` — live in
+`~/.config/privacyos/` once installed, not in the cloned repo folder, so
+`upgrade` still works even if you delete that folder afterward. Edit them
+there; `upgrade` only ever reads them, never overwrites them.
 
 ## Roadmap
 
