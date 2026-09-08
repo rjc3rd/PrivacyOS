@@ -686,7 +686,39 @@ bootstrap_and_rename_profile() {
       warn "Couldn't rename $browser_cmd's profile folder -- skipping its hardening this run."
       return
     fi
-    sed -i -E "s/^(Default=).*/\1$new_name/; s/^(Name=).*/\1$new_name/; s/^(Path=).*/\1$new_name/" "$ini" \
+    # Scoped specifically to the [InstallXXXX] section's own Default= line
+    # and the one [ProfileN] block whose Path= matches $old_name -- NOT a
+    # blanket "rewrite every Default=/Name=/Path= line in the file". Real
+    # bug, found via real testing: every browser here normally creates a
+    # SECOND, unrelated legacy-format profile block alongside the real one
+    # (confirmed on all three, not just Waterfox -- see CLAUDE.md). A
+    # blanket rewrite stomped that second block's Name=/Path=/Default=1
+    # too, overwriting its legacy boolean Default=1 flag into the literal
+    # text "Default=PrivacyOS" and making it falsely claim the same Path=
+    # as the real profile -- harmless in practice (nothing reads that
+    # block on a normal launch) but genuinely corrupted, misleading data
+    # sitting in a file that's supposed to be trustworthy.
+    awk -v old="$old_name" -v new="$new_name" '
+      function flush_buffer(   i, line) {
+        for (i = 1; i <= n; i++) {
+          line = buf[i]
+          if (is_target) {
+            if (line ~ /^Name=/) line = "Name=" new
+            if (line ~ /^Path=/) line = "Path=" new
+          }
+          print line
+        }
+        n = 0
+        is_target = 0
+      }
+      /^\[Install/ { flush_buffer(); print; in_install=1; in_profile=0; next }
+      /^\[Profile/ { flush_buffer(); in_install=0; in_profile=1; n=0; buf[++n]=$0; next }
+      /^\[/        { flush_buffer(); in_install=0; in_profile=0; print; next }
+      in_install && /^Default=/ { print "Default=" new; next }
+      in_profile   { buf[++n]=$0; if ($0 == "Path=" old) is_target=1; next }
+      { print }
+      END { flush_buffer() }
+    ' "$ini" > "$ini.new" && mv "$ini.new" "$ini" \
       || warn "Renamed $browser_cmd's profile folder but couldn't update profiles.ini to match -- it may not be found correctly."
   fi
   cp "$user_js_source" "$profile_root/$new_name/user.js" \
