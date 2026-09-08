@@ -629,12 +629,25 @@ bootstrap_and_rename_profile() {
     return
   fi
 
-  if ! mv "$profile_root/$old_name" "$profile_root/$new_name" 2>/dev/null; then
-    warn "Couldn't rename $browser_cmd's profile folder -- skipping its hardening this run."
-    return
+  # On a re-run (privacyos.sh is meant to be safely rerunnable -- to pick up
+  # new features, refresh hardening, etc.) the profile is very often already
+  # named $new_name from a previous run. Skip the rename entirely in that
+  # case rather than run `mv` anyway: confirmed via direct testing that `mv`
+  # treats an *existing* directory as "move the source inside it," not
+  # "replace it" -- `mv PrivacyOS PrivacyOS` actually fails ("cannot move
+  # 'PrivacyOS' to a subdirectory of itself"), which would have silently
+  # stopped user.js from ever being refreshed on every single re-run after
+  # the first, with a confusing warning every time. Nothing would have been
+  # destroyed by that failure (mv errors out before touching anything), but
+  # the refresh would have quietly stopped working.
+  if [[ "$old_name" != "$new_name" ]]; then
+    if ! mv "$profile_root/$old_name" "$profile_root/$new_name" 2>/dev/null; then
+      warn "Couldn't rename $browser_cmd's profile folder -- skipping its hardening this run."
+      return
+    fi
+    sed -i -E "s/^(Default=).*/\1$new_name/; s/^(Name=).*/\1$new_name/; s/^(Path=).*/\1$new_name/" "$ini" \
+      || warn "Renamed $browser_cmd's profile folder but couldn't update profiles.ini to match -- it may not be found correctly."
   fi
-  sed -i -E "s/^(Default=).*/\1$new_name/; s/^(Name=).*/\1$new_name/; s/^(Path=).*/\1$new_name/" "$ini" \
-    || warn "Renamed $browser_cmd's profile folder but couldn't update profiles.ini to match -- it may not be found correctly."
   cp "$user_js_source" "$profile_root/$new_name/user.js" \
     || warn "Couldn't copy hardened preferences into $browser_cmd's profile."
 }
