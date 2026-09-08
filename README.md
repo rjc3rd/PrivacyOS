@@ -50,16 +50,24 @@ specifically for a hardening project rather than being a knock on either:
 - This project is currently verified against **Debian 13.6.0**, released
   2026-07-11.
   - Cinnamon live image:
-    [debian-live-13.6.0-amd64-cinnamon.iso](https://cdimage.debian.org/debian-cd/13.6.0-live/amd64/iso-hybrid/) (~3.8 GB)
+    [debian-live-13.6.0-amd64-cinnamon.iso](https://cdimage.debian.org/debian-cd/13.6.0-live/amd64/iso-hybrid/debian-live-13.6.0-amd64-cinnamon.iso) (~3.8 GB) —
+    links straight to the file itself, not the folder, so there's no risk of
+    grabbing the GNOME/KDE/XFCE/etc. image by mistake. Debian also publishes
+    a [.torrent](https://cdimage.debian.org/debian-cd/13.6.0-live/amd64/bt-hybrid/debian-live-13.6.0-amd64-cinnamon.iso.torrent)
+    for it if you'd rather grab it that way — no separate magnet link is
+    published alongside it, just the `.torrent` file itself, which any
+    client (qBittorrent, Transmission, etc.) opens the same way.
   - Prefer a minimal/manual install instead? The plain
-    [debian-13.6.0-amd64-netinst.iso](https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/) (~755 MB)
+    [debian-13.6.0-amd64-netinst.iso](https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso) (~755 MB,
+    [.torrent](https://cdimage.debian.org/debian-cd/current/amd64/bt-cd/debian-13.6.0-amd64-netinst.iso.torrent))
     works too — just make sure to select Cinnamon in the installer's software
     selection screen (or run `sudo apt install task-cinnamon-desktop`
-    afterward if you didn't).
+    afterward if you didn't). Unlike the Cinnamon live link above, both of
+    these are on Debian's "current" path, so they'll silently serve whatever
+    point release is newest by the time you click them, not necessarily
+    13.6.0.
   - Checksums: `SHA256SUMS`/`SHA512SUMS` (+ `.sign` files) sit in the same
     directory as whichever image you pick — verify before you install.
-  - A frozen copy of this exact point release (rather than "whatever's
-    current") lives at `cdimage.debian.org/cdimage/archive/13.6.0/`.
   - Newer Debian point releases should work fine — this project is pinned to
     the `trixie` codename, not a specific point release, and it runs
     `apt update && apt upgrade` as its first real step regardless of which
