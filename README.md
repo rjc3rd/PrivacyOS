@@ -18,10 +18,31 @@ manager's tracking.
 Read the script before you run it. That's the point — there's nothing here
 you can't see for yourself.
 
+## Why Debian, not Ubuntu or Linux Mint
+
+Both are themselves built on Debian — Ubuntu is a Debian derivative, and Mint is
+built on top of *Ubuntu*, so it's two layers removed from Debian itself. This
+project builds directly on Debian instead, deliberately, for reasons that matter
+specifically for a hardening project rather than being a knock on either:
+
+- Fewer layers between an upstream security fix and your machine — packages come
+  from Debian's own archive or a vendor's own repo, not a derivative's repackaging
+  of one.
+- Debian doesn't carry Ubuntu's Snap-by-default packaging or its history of
+  bundling things like commercial search integration — starting from the plainer,
+  more scrutinized base means less to audit and undo before any hardening even
+  starts.
+- It matches this project's own APT-only rule: everything stays one hop from
+  upstream, not two.
+
 ## Requirements
 
-- A fresh install of **Debian 13 (Trixie)** — Cinnamon desktop recommended,
-  but the script itself doesn't require it.
+- A fresh install of **Debian 13 (Trixie)** with the **Cinnamon** desktop
+  already installed (`sudo apt install task-cinnamon-desktop`, or select it
+  in Debian's own installer). This is a real requirement, not a suggestion —
+  the Nemo file-manager integration and the bloat-purge list are both
+  written specifically for what a Cinnamon install includes. Other desktops
+  aren't supported.
 - This project is currently verified against **Debian 13.6.0**, released
   2026-07-11.
   - Installer: [debian-13.6.0-amd64-netinst.iso](https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/) (~755 MB)
