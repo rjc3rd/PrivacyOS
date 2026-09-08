@@ -1,0 +1,10 @@
+# custom.hosts — your own additions, merged into /etc/hosts ahead of the
+# StevenBlack list every time privacyos.sh runs. Nothing in this file is
+# downloaded from anywhere; it's yours to edit.
+#
+# Same format as any hosts file — one entry per line:
+#   0.0.0.0 some-domain-you-want-blocked.com
+#
+# Empty by default. Add whatever you personally want blocked (or, for
+# entries you need to make sure *aren't* blocked, see the README's note on
+# resolving conflicts with the StevenBlack list).
