@@ -54,9 +54,11 @@ specifically for a hardening project rather than being a knock on either:
     links straight to the file itself, not the folder, so there's no risk of
     grabbing the GNOME/KDE/XFCE/etc. image by mistake. Debian also publishes
     a [.torrent](https://cdimage.debian.org/debian-cd/13.6.0-live/amd64/bt-hybrid/debian-live-13.6.0-amd64-cinnamon.iso.torrent)
-    for it if you'd rather grab it that way — no separate magnet link is
-    published alongside it, just the `.torrent` file itself, which any
-    client (qBittorrent, Transmission, etc.) opens the same way.
+    for it — often faster than downloading straight from Debian's own
+    server, since you're pulling pieces from everyone else currently
+    sharing the file at the same time instead of one single source. Any
+    torrent client (Deluge, qBittorrent, Transmission, etc.) opens it
+    directly.
   - Prefer a minimal/manual install instead? The plain
     [debian-13.6.0-amd64-netinst.iso](https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso) (~755 MB,
     [.torrent](https://cdimage.debian.org/debian-cd/current/amd64/bt-cd/debian-13.6.0-amd64-netinst.iso.torrent))
