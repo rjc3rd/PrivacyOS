@@ -396,8 +396,19 @@ add_repos() {
 
 install_core_packages() {
   log "Installing core privacy/security tooling..."
+  # wireshark-common's installer normally asks whether to let non-root
+  # users capture packets (via the "wireshark" group + setcap on dumpcap,
+  # the recommended way — better than running the whole GUI as root).
+  # Default is "no" either way, seen or not, which means the group never
+  # gets created and the usermod right after this would fail outright.
+  # Pre-answer it so this doesn't depend on how that prompt gets handled.
+  echo "wireshark-common wireshark-common/install-setuid boolean true" | sudo debconf-set-selections
   apt_install secure-delete wipe bleachbit riseup-vpn tor keepassxc wireshark
-  sudo usermod -a -G wireshark "$USER"
+  sudo dpkg-reconfigure -f noninteractive wireshark-common
+  sudo usermod -a -G wireshark "$USER" \
+    || warn "Couldn't add you to the wireshark group — non-root packet capture may not work, but continuing anyway."
+  # Doesn't take effect for this session until the next login — the
+  # script's own final reboot at the end handles that.
 
   mkdir -p "$HOME/.local/share/nemo/scripts"
   printf '#!/bin/sh\nsrm -llrv "$@"\n' > "$HOME/.local/share/nemo/scripts/Secure-Delete"
