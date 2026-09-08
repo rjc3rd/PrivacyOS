@@ -1,9 +1,13 @@
 # PrivacyOS
 
-> **🚧 Work in progress — currently in testing.** Nothing here has been run
-> end-to-end on real hardware yet, so treat it as a preview: you're welcome
-> to try it and see how it goes, but expect rough edges until that testing
-> is done. Aiming to have this fully ready **by September 20, 2026**.
+> **🚧 Work in progress — actively in testing.** The core install has
+> completed successfully, repeatedly, end-to-end — packages, DNS, hosts
+> blocklist, browser hardening, default browser and search engine, all
+> confirmed working on a real install. A couple of pieces (automatic
+> security updates, the firewall) were just added and haven't been through
+> that same testing yet, and it's only been run on one setup so far, not a
+> range of real hardware. You're welcome to try it and report anything that
+> breaks — that's genuinely useful right now.
 
 A single script that turns a fresh Debian 13 (Trixie) install into a hardened,
 privacy-first desktop — get networking working, run the script, done.
@@ -217,6 +221,18 @@ in the background are normal.
 - Installs Thunderbird for mail.
 - Configures an encrypted DNS resolver (Quad9 by default) via
   `systemd-resolved`.
+- Installs and enables `unattended-upgrades` for automatic *security* updates
+  specifically — Debian's own shipped default config already restricts to
+  security-only, nothing else gets silently auto-installed. This doesn't
+  replace `upgrade` (below) — it handles routine background security
+  patching, `upgrade` is still how you refresh the hosts list and browser
+  hardening, and do a full package upgrade whenever you want one.
+- Installs and enables [ufw](https://help.ubuntu.com/community/UFW) with the
+  simplest correct desktop posture: deny all incoming, allow all outgoing.
+  Nothing on this machine is meant to be reachable from the network, and
+  everything an actual user does — browsing, email, messaging — is a
+  connection this machine starts outward, so nothing here needs to be
+  specially allowed.
 - Builds `/etc/hosts` from the [StevenBlack](https://github.com/StevenBlack/hosts)
   list plus your own [custom.hosts](custom.hosts) (see below).
 - Builds hardened browser preferences from
@@ -402,12 +418,16 @@ same benefit without that trade-off.
 
 ## Status
 
-First draft, not yet run end-to-end on real hardware. This script is written
-and maintained here; actually *running* it — real `apt install`/`remove`,
-editing `/etc/hosts`, live network changes — needs to happen on hardware or a
-VM, by a human, since that's not something safe to automate blindly. Expect
-rough edges, especially around the DNS/NetworkManager interaction, until
-that's happened at least once.
+Core install (packages, DNS, hosts blocklist, browser hardening/extensions,
+default browser, default search engine) has been tested end-to-end multiple
+times and completes successfully, including a full reboot into a working
+system. Automatic security updates and the firewall are newly added and
+haven't been through that same real-install testing yet. `--theme` is wired
+into the flag/prompt system but has no implementation behind it yet. All of
+this has only run on one testing setup so far — not yet tried across a range
+of real hardware or network configurations, so still expect the occasional
+rough edge outside what's been directly exercised, particularly around the
+DNS/NetworkManager interaction on hardware this hasn't been tried on.
 
 ## License
 

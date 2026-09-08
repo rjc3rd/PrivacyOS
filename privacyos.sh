@@ -495,6 +495,36 @@ configure_dns() {
   warn "DNS config is a first pass — verify 'resolvectl status' shows it after reboot; network-manager interactions can vary by hardware."
 }
 
+install_unattended_upgrades() {
+  log "Installing unattended-upgrades for automatic security updates..."
+  # Debian's own shipped /etc/apt/apt.conf.d/50unattended-upgrades already
+  # restricts to security-only updates by default (confirmed against the
+  # Debian Wiki, not assumed -- this is a real difference from Ubuntu's
+  # default) -- nothing to write or override there. Installing the package
+  # alone doesn't turn on the periodic timer, though; 20auto-upgrades is
+  # what actually activates it (exact content confirmed against multiple
+  # sources, not guessed).
+  apt_install unattended-upgrades
+  printf 'APT::Periodic::Update-Package-Lists "1";\nAPT::Periodic::Unattended-Upgrade "1";\n' \
+    | sudo tee /etc/apt/apt.conf.d/20auto-upgrades > /dev/null \
+    || warn "Couldn't write 20auto-upgrades -- unattended-upgrades is installed but its periodic timer may not be active."
+}
+
+install_firewall() {
+  log "Installing and enabling ufw (deny all incoming, allow all outgoing)..."
+  # This exact default posture was worked through deliberately, not assumed:
+  # every normal desktop use case -- browsing, email, messaging, even FTP in
+  # the passive mode virtually every client defaults to -- is a connection
+  # this machine's own apps initiate outward, so none of it needs any
+  # special-casing here. What actually matters is the inbound side: nothing
+  # on this machine is meant to be reachable from the network, so deny is
+  # the correct default, not a placeholder to loosen later.
+  apt_install ufw
+  sudo ufw default deny incoming || warn "Couldn't set ufw's default incoming policy."
+  sudo ufw default allow outgoing || warn "Couldn't set ufw's default outgoing policy."
+  sudo ufw --force enable || warn "Couldn't enable ufw -- it's installed and configured, but not actually active. Run 'sudo ufw enable' yourself to turn it on."
+}
+
 init_config_dir() {
   mkdir -p "$PRIVACYOS_CONFIG_DIR"
   # Bundled defaults are embedded directly below (this script is meant to
@@ -1302,6 +1332,8 @@ main() {
   add_repos
   install_core_packages
   configure_dns
+  install_unattended_upgrades
+  install_firewall
   build_hosts_blocklist
   harden_browsers
   configure_extensions
