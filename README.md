@@ -107,6 +107,24 @@ makes it real protection in the first place.
 
 ## Quick start
 
+**If you set a root password during Debian's installer** (the traditional
+Debian way — different from Ubuntu, which leaves root disabled and adds
+your user to `sudo` automatically), your regular user isn't a sudoer yet by
+default. If a plain `sudo -v` fails with something like "is not in the
+sudoers file," fix that first:
+
+```sh
+su -c "usermod -aG sudo $(whoami)"
+newgrp sudo
+```
+
+`su` (not `sudo`) since you don't have sudo rights yet — enter your **root**
+password when prompted, not your user password. `newgrp sudo` activates the
+new group membership immediately in this terminal; if it ever doesn't
+behave as expected, logging out and back in (or a reboot) always works too.
+
+Then:
+
 ```sh
 sudo apt install git -y
 git clone https://github.com/rjc3rd/PrivacyOS.git
@@ -115,10 +133,11 @@ cd PrivacyOS
 ./privacyos.sh
 ```
 
-That first line matters — a stock Debian desktop, including the Cinnamon
-live image above, doesn't come with `git` installed by default. Safe to
-run even if you already have it (it just no-ops), but leaving it out is
-the single most likely reason this block would fail on a fresh install.
+That first line matters on its own too — a stock Debian desktop, including
+the Cinnamon live image above, doesn't come with `git` installed by
+default. Safe to run even if you already have it (it just no-ops), but
+leaving it out is the single most likely reason this block would fail on a
+fresh install.
 
 Run it as your normal user, not root — it calls `sudo` itself wherever it
 needs to.
