@@ -3,6 +3,18 @@
 # privacyos.sh — turn a fresh Debian 13 (Trixie) install into PrivacyOS:
 # a hardened, privacy-first desktop. https://github.com/rjc3rd/PrivacyOS
 #
+# This is the one file you need. Fetch it, run it:
+#   curl -fsSLO https://raw.githubusercontent.com/rjc3rd/PrivacyOS/main/privacyos.sh
+#   chmod +x privacyos.sh
+#   ./privacyos.sh
+#
+# It's fully self-contained on purpose — no sibling files it depends on,
+# nothing else to download first. If your user doesn't have sudo access
+# yet, it walks you through fixing that (which needs a reboot) and asks
+# you to just run it again afterward — apt/package steps are idempotent,
+# so a second run picks up quickly rather than needing to resume from
+# some particular point.
+#
 # Usage:
 #   ./privacyos.sh [flags]
 #   ./privacyos.sh --help
@@ -15,9 +27,9 @@
 #     interactively — as a GUI dialog if zenity/yad is available, a plain
 #     terminal prompt otherwise. Pass --yes to skip all prompts and take
 #     the defaults noted below.
-#   - Must be run as a normal user with sudo rights, NOT as root. Sudo is
-#     used internally per-command, matching how you'd run any other
-#     install script.
+#   - Must be run as a normal user, NOT as root — sudo is used internally
+#     per-command, and it's set up for you automatically if it isn't
+#     already there.
 #
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
@@ -49,6 +61,9 @@ PROMPT_BACKEND=""            # resolved at runtime: zenity | yad | tty
 log()  { printf '\n\033[1;32m[privacyos]\033[0m %s\n' "$*"; }
 warn() { printf '\n\033[1;33m[privacyos] warning:\033[0m %s\n' "$*" >&2; }
 die()  { printf '\n\033[1;31m[privacyos] error:\033[0m %s\n' "$*" >&2; exit 1; }
+# A beat after announcing a phase, before its (often noisy) output starts --
+# long enough to actually read the line, not so long it drags out testing.
+pause() { sleep "${1:-3}"; }
 
 usage() {
   cat <<'EOF'
@@ -105,12 +120,22 @@ parse_args() {
 # Sanity checks
 # ============================================================
 require_not_root() {
-  [[ "${EUID}" -eq 0 ]] && die "Run this as your normal user, not root — it calls sudo itself where needed."
+  # NOT "[[ cond ]] && die ..." -- under set -e, a false [[ ]] test makes
+  # that whole line exit 1, which kills the script right here, silently,
+  # every single time the condition is (correctly, normally) false. Real
+  # bug, found via actual testing -- see the project notes for the story.
+  if [[ "${EUID}" -eq 0 ]]; then
+    die "Run this as your normal user, not root — it calls sudo itself where needed."
+  fi
 }
 
 require_debian_trixie() {
   local id="" codename=""
-  [[ -r /etc/os-release ]] && { . /etc/os-release; id="${ID:-}"; codename="${VERSION_CODENAME:-}"; }
+  if [[ -r /etc/os-release ]]; then
+    . /etc/os-release
+    id="${ID:-}"
+    codename="${VERSION_CODENAME:-}"
+  fi
   if [[ "$id" != "debian" || "$codename" != "trixie" ]]; then
     warn "This is built for Debian 13 (Trixie). Detected: ${id:-unknown} ${codename:-unknown}."
     warn "Continuing anyway — expect rough edges on anything else."
@@ -146,6 +171,71 @@ EOF
   local reply
   read -r -p "Type 'yes' to confirm this is a fresh install you're OK with changing: " reply
   [[ "$reply" == "yes" ]] || die "Not confirmed — exiting without changing anything."
+}
+
+ensure_sudo_or_fix_and_exit() {
+  # Fresh Debian installs don't always leave the user in the sudo group --
+  # depends on whether a root password was set during Debian's installer
+  # (the traditional Debian way; different from Ubuntu, which leaves root
+  # disabled and adds the user to sudo automatically instead). If sudo
+  # already works, there's nothing to do here.
+  if sudo -n true 2>/dev/null || sudo -v 2>/dev/null; then
+    return
+  fi
+  cat <<'EOF'
+
+Your user doesn't have sudo access yet.
+
+This is normal if you set a root password during Debian's installer.
+Enter your ROOT password (not your user password) below to fix this:
+EOF
+  # Full path, not just "usermod" — su without a login shell doesn't load
+  # root's PATH, and usermod lives in /usr/sbin, which your own PATH
+  # almost certainly doesn't include. Learned this the hard way — see the
+  # project notes if curious.
+  su -c "/usr/sbin/usermod -aG sudo $(whoami)"
+  cat <<'EOF'
+
+Done — your user now has sudo access, but it needs a full reboot to
+actually take effect. Logging out and back in was tested directly and
+confirmed NOT enough on this setup (Cinnamon's session can hold onto
+enough state to skip re-checking group membership) — a real reboot is
+needed, not just a shorter alternative to one.
+
+The rest of this script runs almost entirely through sudo, so it can't
+continue until your sudo access is actually active — which means this
+reboot has to happen first. Not optional, just asking when, not if.
+
+If you say yes below, you'll be asked for your root password one more
+time — su asks fresh each time, it doesn't remember the one you just
+typed — that's what actually triggers the reboot itself.
+EOF
+  local reply
+  read -r -p "Reboot now? [y/N] " reply
+  if [[ "$reply" =~ ^[Yy]$ ]]; then
+    # su, not sudo -- you don't have sudo yet, that's the whole reason
+    # we're here. Full path again, same PATH reason as usermod above.
+    su -c "/usr/sbin/reboot"
+  else
+    echo "OK — reboot whenever you're ready, then run ./privacyos.sh again to continue."
+  fi
+  exit 0
+}
+
+install_basic_tools() {
+  log "Now we begin the OS update/upgrade..."
+  pause
+  sudo apt update -y
+  sudo apt upgrade -y
+
+  log "Now we install a small tool set for the rest of the PrivacyOS installation..."
+  # wget and gnupg specifically aren't optional -- this script calls wget
+  # and gpg internally further down (fetching blocklists/prefs, dearmoring
+  # repo keys) and can't get past those steps without them. git and curl
+  # round out a baseline toolset worth having on a system like this
+  # regardless of whether this script itself happens to need them today.
+  pause
+  sudo apt install -y wget gnupg git curl
 }
 
 keep_sudo_alive() {
@@ -296,13 +386,17 @@ install_core_packages() {
   chmod +x "$HOME/.local/share/nemo/scripts/Secure-Delete"
 
   log "Installing browsers..."
+  # Same set -e trap as require_not_root above -- these were the more
+  # serious instances of it: every one of --no-librewolf/--no-firefox/
+  # --no-tor/--no-waterfox/--no-chromium would have killed the script
+  # silently the moment it evaluated the browser you opted out of.
   local browsers=()
-  [[ "$WANT_LIBREWOLF" == "yes" ]] && browsers+=(librewolf)
-  [[ "$WANT_FIREFOX"   == "yes" ]] && browsers+=(firefox)
-  [[ "$WANT_TOR"       == "yes" ]] && browsers+=(torbrowser-launcher)
-  [[ "$WANT_WATERFOX"  == "yes" ]] && browsers+=(waterfox)
-  [[ "$WANT_CHROMIUM"  == "yes" ]] && browsers+=(chromium)
-  ((${#browsers[@]})) && apt_install "${browsers[@]}"
+  if [[ "$WANT_LIBREWOLF" == "yes" ]]; then browsers+=(librewolf); fi
+  if [[ "$WANT_FIREFOX"   == "yes" ]]; then browsers+=(firefox); fi
+  if [[ "$WANT_TOR"       == "yes" ]]; then browsers+=(torbrowser-launcher); fi
+  if [[ "$WANT_WATERFOX"  == "yes" ]]; then browsers+=(waterfox); fi
+  if [[ "$WANT_CHROMIUM"  == "yes" ]]; then browsers+=(chromium); fi
+  if ((${#browsers[@]})); then apt_install "${browsers[@]}"; fi
   # Chromium is deliberately left bare — no extensions, no config changes.
   # It exists purely as a fallback for the rare site a hardened browser breaks.
 
@@ -353,12 +447,46 @@ configure_dns() {
 
 init_config_dir() {
   mkdir -p "$PRIVACYOS_CONFIG_DIR"
-  local repo_dir
-  repo_dir="$(dirname "$0")"
-  # Copy in the bundled defaults only if they're not already there — a
-  # second run (or `upgrade` later) must never clobber edits made here.
-  [[ -f "$PRIVACYOS_CONFIG_DIR/custom.hosts" ]] || cp "$repo_dir/custom.hosts" "$PRIVACYOS_CONFIG_DIR/custom.hosts" 2>/dev/null || true
-  [[ -f "$PRIVACYOS_CONFIG_DIR/overrides-user.js" ]] || cp "$repo_dir/overrides-user.js" "$PRIVACYOS_CONFIG_DIR/overrides-user.js" 2>/dev/null || true
+  # Bundled defaults are embedded directly below (this script is meant to
+  # be fetched and run as a single file — no sibling files to depend on)
+  # and only written out if not already there — a second run (or `upgrade`
+  # later) must never clobber edits already made here.
+  if [[ ! -f "$PRIVACYOS_CONFIG_DIR/custom.hosts" ]]; then
+    cat > "$PRIVACYOS_CONFIG_DIR/custom.hosts" <<'CUSTOM_HOSTS_EOF'
+# custom.hosts — your own additions, merged into /etc/hosts ahead of the
+# StevenBlack list every time privacyos.sh or upgrade runs. Nothing in
+# this file is downloaded from anywhere; it's yours to edit.
+#
+# Same format as any hosts file — one entry per line:
+#   0.0.0.0 some-domain-you-want-blocked.com
+#
+# Empty by default. Add whatever you personally want blocked (or, for
+# entries you need to make sure *aren't* blocked, see the README's note
+# on resolving conflicts with the StevenBlack list — this file is merged
+# in first, so an entry here takes priority over anything StevenBlack
+# blocks for the same hostname).
+CUSTOM_HOSTS_EOF
+  fi
+  if [[ ! -f "$PRIVACYOS_CONFIG_DIR/overrides-user.js" ]]; then
+    cat > "$PRIVACYOS_CONFIG_DIR/overrides-user.js" <<'OVERRIDES_EOF'
+// PrivacyOS overrides-user.js
+//
+// Applied on top of Arkenfox + Betterfox (Firefox/Waterfox), or by itself
+// on LibreWolf (which already hardens its own defaults heavily — layering
+// the full Arkenfox/Betterfox set on it risks fighting settings it made
+// on purpose). This file is intentionally small: a starting point, not a
+// complete hardening profile — that's what Arkenfox/Betterfox already
+// are. Add to it as real usage turns up more.
+
+// Turn off Firefox Sync / accounts prompts — this project doesn't want
+// browser profiles phoning home to a Mozilla account by default.
+user_pref("identity.fxaccounts.enabled", false);
+
+// Pocket is a third-party save-for-later service wired into the UI by
+// default — no reason for it to be on in a privacy-first browser.
+user_pref("extensions.pocket.enabled", false);
+OVERRIDES_EOF
+  fi
 }
 
 build_hosts_blocklist() {
@@ -379,7 +507,7 @@ build_hosts_blocklist() {
   # deleted later. Never downloaded — it's the place to hand-add your own
   # entries. Merged in first, same as the old script's .PrivacyOS.hosts did.
   local custom_hosts="$PRIVACYOS_CONFIG_DIR/custom.hosts"
-  [[ -f "$custom_hosts" ]] && cat "$custom_hosts" >> "$workdir/hosts.new"
+  if [[ -f "$custom_hosts" ]]; then cat "$custom_hosts" >> "$workdir/hosts.new"; fi
 
   if wget -qO- https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts >> "$workdir/hosts.new" 2>/dev/null; then
     log "  merged StevenBlack/hosts"
@@ -637,7 +765,93 @@ install_apps_extras() {
 install_upgrade_command() {
   log "Installing the 'upgrade' command..."
   mkdir -p "$HOME/.local/bin"
-  cp "$(dirname "$0")/upgrade" "$HOME/.local/bin/upgrade"
+  # Embedded rather than copied from a sibling file — this script is meant
+  # to be fetched and run standalone. Keep this in sync with the repo's
+  # own top-level `upgrade` file if either changes; they're meant to be
+  # identical.
+  cat > "$HOME/.local/bin/upgrade" <<'UPGRADE_EOF'
+#!/usr/bin/env bash
+#
+# upgrade — keep a PrivacyOS install current in one command: system
+# packages, old kernels, the hosts blocklist, and hardened browser
+# preferences. Installed to ~/.local/bin/upgrade by privacyos.sh — meant to
+# be run as part of your normal routine, as often as you'd otherwise run
+# `apt update && apt upgrade` by hand.
+#
+# Reads custom.hosts/overrides-user.js from ~/.config/privacyos/ (set up by
+# privacyos.sh at install time) — edit those there for your own additions,
+# they aren't touched by this script, only read.
+#
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+
+PRIVACYOS_CONFIG_DIR="$HOME/.config/privacyos"
+
+log()  { printf '\n\033[1;32m[upgrade]\033[0m %s\n' "$*"; }
+warn() { printf '\n\033[1;33m[upgrade] warning:\033[0m %s\n' "$*" >&2; }
+
+if [[ "${EUID}" -eq 0 ]]; then
+  echo "Run this as your normal user, not root — it calls sudo itself where needed." >&2
+  exit 1
+fi
+
+sudo -v || { echo "Needs sudo access." >&2; exit 1; }
+( while true; do sudo -n true; sleep 60; kill -0 "$$" 2>/dev/null || exit; done ) &
+SUDO_KEEPALIVE_PID=$!
+trap '[[ -n "${SUDO_KEEPALIVE_PID:-}" ]] && kill "$SUDO_KEEPALIVE_PID" 2>/dev/null || true' EXIT
+
+log "Updating and upgrading installed packages..."
+sudo apt-get update
+sudo apt-get upgrade -y
+
+log "Removing old kernels no longer in use..."
+dpkg -l 'linux-image-[0-9]*' 'linux-headers-[0-9]*' 2>/dev/null | awk '/^ii/{print $2}' \
+  | grep -v -- "$(uname -r | cut -f1,2 -d'-')" | grep -e '[0-9]' \
+  | xargs -r sudo apt-get -y purge
+
+sudo apt-get clean -y
+sudo apt-get autoclean -y
+sudo apt-get autoremove --purge -y
+
+log "Rebuilding /etc/hosts from StevenBlack + your custom.hosts..."
+workdir="$(mktemp -d)"
+: > "$workdir/hosts.new"
+printf '127.0.0.1 localhost\n127.0.1.1 privacyos\n::1 localhost ip6-localhost ip6-loopback\n\n' >> "$workdir/hosts.new"
+custom_hosts="$PRIVACYOS_CONFIG_DIR/custom.hosts"
+if [[ -f "$custom_hosts" ]]; then cat "$custom_hosts" >> "$workdir/hosts.new"; fi
+if wget -qO- https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts >> "$workdir/hosts.new" 2>/dev/null; then
+  log "  merged StevenBlack/hosts"
+else
+  warn "  couldn't fetch the StevenBlack list this run — /etc/hosts will only have your custom.hosts entries"
+fi
+sudo cp "$workdir/hosts.new" /etc/hosts
+rm -rf "$workdir"
+
+log "Rebuilding hardened browser preferences (Arkenfox + Betterfox)..."
+workdir="$(mktemp -d)"
+wget -qO "$workdir/arkenfox-user.js" https://raw.githubusercontent.com/arkenfox/user.js/master/user.js \
+  || warn "couldn't fetch Arkenfox user.js"
+wget -qO "$workdir/betterfox-user.js" https://raw.githubusercontent.com/yokoffing/Betterfox/main/user.js \
+  || warn "couldn't fetch Betterfox user.js"
+overrides="$PRIVACYOS_CONFIG_DIR/overrides-user.js"
+cat "$workdir"/arkenfox-user.js "$workdir"/betterfox-user.js "$overrides" \
+  > "$workdir/full-user.js" 2>/dev/null || cat "$workdir"/arkenfox-user.js "$workdir"/betterfox-user.js > "$workdir/full-user.js"
+
+# Same split as privacyos.sh's own harden_browsers(): LibreWolf already
+# hardens its own defaults, so it gets just the small overrides file, not
+# the full Arkenfox/Betterfox stack — keep these two in sync if either
+# changes.
+profile_dir="$(find "$HOME/.librewolf" -maxdepth 1 -name '*.default*' 2>/dev/null | head -n1)"
+if [[ -n "$profile_dir" ]]; then cp "$overrides" "$profile_dir/user.js" 2>/dev/null || true; fi
+
+for browser_home in "$HOME/.mozilla/firefox" "$HOME/.waterfox"; do
+  profile_dir="$(find "$browser_home" -maxdepth 1 -name '*.default*' 2>/dev/null | head -n1)"
+  if [[ -n "$profile_dir" ]]; then cp "$workdir/full-user.js" "$profile_dir/user.js" 2>/dev/null || true; fi
+done
+rm -rf "$workdir"
+
+log "All done."
+UPGRADE_EOF
   chmod +x "$HOME/.local/bin/upgrade"
   # ~/.local/bin is on PATH by default on Debian (added via the standard
   # skel .profile) — if it somehow isn't for this user, `upgrade` still
@@ -668,7 +882,9 @@ main() {
   require_not_root
   require_debian_trixie
   confirm_fresh_install
+  ensure_sudo_or_fix_and_exit
   keep_sudo_alive
+  install_basic_tools
   ensure_prompt_backend
   resolve_interactive_choices
   init_config_dir
@@ -681,8 +897,12 @@ main() {
   build_hosts_blocklist
   harden_browsers
   configure_extensions
-  [[ "$WANT_THEME" == "yes" ]] && install_theme_extras
-  [[ "$WANT_APPS"  == "yes" ]] && install_apps_extras
+  # The most serious instance of this whole bug class: declining theme
+  # (the recommended default!) would have silently ended the entire
+  # script right here under the old "[[ ]] && fn" form -- never setting
+  # the hostname, never doing the final update, never rebooting.
+  if [[ "$WANT_THEME" == "yes" ]]; then install_theme_extras; fi
+  if [[ "$WANT_APPS"  == "yes" ]]; then install_apps_extras; fi
   install_upgrade_command
   set_hostname
   final_update_and_reboot

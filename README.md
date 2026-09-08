@@ -107,42 +107,39 @@ makes it real protection in the first place.
 
 ## Quick start
 
-Not everything can be assumed present on a fresh system — `git` and `wget`
-usually aren't, but `curl` reliably is. Everything happens from one
-terminal, starting with fetching the one file you actually need by hand:
+One file, fetched with `curl` (present by default where `git` and `wget`
+usually aren't), run from one terminal:
 
 ```sh
-curl -fsSLO https://raw.githubusercontent.com/rjc3rd/PrivacyOS/main/install.sh
-chmod +x install.sh
-./install.sh
+curl -fsSLO https://raw.githubusercontent.com/rjc3rd/PrivacyOS/main/privacyos.sh
+chmod +x privacyos.sh
+./privacyos.sh
 ```
 
-`install.sh` and `privacyos.sh` do two different jobs, back to back.
-`install.sh` **prepares** the fresh Debian install for everything after
-it — makes sure your user actually has `sudo` (walking you through fixing
-it if not), gets the system fully updated, installs a basic set of tools
-(`wget`, `gnupg`, `git`, `curl` — `privacyos.sh` itself calls `wget` and
-`gpg` internally, so these aren't optional extras), and downloads this
-repo. None of that is PrivacyOS-specific; it's just what has to be true
-first. Once that's done, it hands off automatically to `privacyos.sh`,
-which is where the actual PrivacyOS install — hardening, browsers,
-everything this README describes below — happens. If your user wasn't a
-sudoer yet (the sudo-fix case), `install.sh` reboots automatically once
-it's fixed that — tested directly, logging out and back in isn't reliably
-enough here, so it doesn't leave that to chance. Once it's back up, run
-`./install.sh` again from the same directory — it picks up right where it
-left off, it won't re-download
-what's already there.
+That's genuinely it — `privacyos.sh` is fully self-contained, no sibling
+files it depends on, nothing else to download first. It checks whether
+your user actually has `sudo` yet and walks you through fixing it if
+not (a fresh Debian install doesn't always grant that automatically —
+depends on a choice made in Debian's own installer), installs a small set
+of basic tools it needs (`wget`, `gnupg`, `git`, `curl`), then goes
+straight into the actual PrivacyOS install this README describes below.
+
+If your user wasn't a sudoer yet, fixing that needs a real reboot —
+tested directly, logging out and back in isn't reliably enough, so the
+script doesn't leave that to chance; it'll ask before rebooting, not just
+do it. Once it's back up, run `./privacyos.sh` again — apt/package steps
+are idempotent, so it picks back up quickly rather than needing to resume
+from some exact point.
 
 Prefer to do each step yourself instead of running a script you haven't
-read line by line first? Totally reasonable, and the point of this project
-is that you can — `install.sh` is short and plain, read it, then either run
-it as-is or do its steps by hand. `git clone` works fine too if you'd
-rather use that (e.g. you're planning to contribute back) — same repo,
-`https://github.com/rjc3rd/PrivacyOS.git`.
+read line by line first? Totally reasonable, and the point of this
+project is that you can — read it, then either run it as-is or do its
+steps by hand. `git clone https://github.com/rjc3rd/PrivacyOS.git` works
+fine too if you'd rather have the whole repo locally (e.g. you're
+planning to contribute back).
 
-Once you're in, run it as your normal user, not root — it calls `sudo`
-itself wherever it needs to.
+Run it as your normal user, not root — it calls `sudo` itself wherever it
+needs to.
 
 Before it changes anything, `privacyos.sh` asks you to type `yes` to
 confirm this is actually a fresh install — same pattern installers like
@@ -154,10 +151,8 @@ Every optional choice is a command-line flag, so you can pre-decide exactly
 what you want (and script/document it, or eventually generate the command
 from a checkbox picker on `privacyos.dev`) instead of answering prompts.
 Anything you don't pass a flag for gets asked interactively — as a graphical
-dialog if available, a plain terminal prompt otherwise. `install.sh` passes
-any flags straight through to `privacyos.sh`, so `./install.sh --theme
---dns=quad9` works the same as running that on `privacyos.sh` directly once
-you're inside the cloned repo.
+dialog if available, a plain terminal prompt otherwise. E.g.
+`./privacyos.sh --theme --dns=quad9`.
 
 ```
 --dns=PROVIDER      quad9 (default) | nextdns | opendns | none
