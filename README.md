@@ -105,6 +105,25 @@ option and no "forgot password" flow. Lose the passphrase and everything on
 the disk is gone, permanently, by design — that's the same property that
 makes it real protection in the first place.
 
+## Root password (optional, but worth deciding on purpose)
+
+Debian's installer separately asks whether to set a root password. This
+one's optional either way — `privacyos.sh` handles it automatically no
+matter what you choose — but knowing the tradeoff now saves a step later:
+
+- **Leave it blank** and Debian adds your regular user to the `sudo` group
+  automatically (this is Ubuntu's default behavior, for comparison). Your
+  user already has `sudo` by the time `privacyos.sh` runs, so it skips
+  straight past the sudo-fix step entirely — one less reboot.
+- **Set a root password** (the traditional Debian way) and your user
+  *isn't* added to `sudo` automatically. Nothing's broken — `privacyos.sh`
+  detects this, walks you through fixing it, and reboots once to make it
+  take effect — just an extra step compared to leaving it blank.
+
+Neither choice is wrong. If you don't have a specific reason to want a
+separate root account, leaving the password blank gets you through the
+install with one fewer reboot.
+
 ## Quick start
 
 One file, fetched with `curl` (present by default where `git` and `wget`
@@ -225,7 +244,11 @@ isn't forced on anyone who just wants the core setup.
   built** — tracked for a future update.
 - `--apps`: GIMP, Inkscape, darktable, RawTherapee, Scribus, Flowblade,
   Audacity, Audacious, mpv, Celluloid, Deluge, SimpleScreenRecorder,
-  VSCodium, Terminator, mintstick, dconf-editor, gnome-clocks.
+  VSCodium, Terminator, mintstick, dconf-editor, gnome-clocks, plus a
+  small, deliberately curated set of basic games — Mahjongg, Mines,
+  Moonlander, Reversi, Solitaire, Sudoku, Yahtzee — chosen specifically
+  instead of reintroducing the old bundled `gnome-games` package this
+  project already purges from core.
 
 ## Ad/tracker blocking
 

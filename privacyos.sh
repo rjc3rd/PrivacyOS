@@ -813,6 +813,13 @@ install_apps_extras() {
   apt_install gimp inkscape darktable rawtherapee scribus flowblade audacity \
     audacious mpv celluloid deluge simplescreenrecorder codium terminator \
     mintstick dconf-editor gnome-clocks
+
+  log "Installing a small, deliberately curated set of basic games..."
+  # Explicitly not the old gnome-games bundle (already purged in core) --
+  # a specific, chosen list instead of everything that used to ship
+  # together, so this doesn't reintroduce the exact bloat that got removed.
+  apt_install gnome-mahjongg gnome-mines moon-lander iagno aisleriot \
+    gnome-sudoku tali
 }
 
 install_upgrade_command() {
