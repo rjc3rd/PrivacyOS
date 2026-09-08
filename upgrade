@@ -87,14 +87,20 @@ cat "$workdir"/arkenfox-user.js "$workdir"/betterfox-user.js "$overrides" \
 # hardens its own defaults, so it gets just the small overrides file, not
 # the full Arkenfox/Betterfox stack — keep these two in sync if either
 # changes.
+#
+# Looks for a profile folder named exactly "PrivacyOS" — that's the fixed
+# name privacyos.sh's own bootstrap_and_rename_profile() renames every
+# profile to at install time, replacing whatever random salt name the
+# browser generated for itself. Not a *.default* pattern anymore: our
+# renamed profiles don't contain "default" in the name at all.
 # || true: find on a path that doesn't exist yet returns non-zero, and
 # under pipefail that kills the whole script even though "no profile yet"
 # is a normal state to find a browser in.
-profile_dir="$(find "$HOME/.librewolf" -maxdepth 1 -name '*.default*' 2>/dev/null | head -n1)" || true
+profile_dir="$(find "$HOME/.librewolf" -maxdepth 1 -name 'PrivacyOS' 2>/dev/null | head -n1)" || true
 if [[ -n "$profile_dir" ]]; then cp "$overrides" "$profile_dir/user.js" 2>/dev/null || true; fi
 
 for browser_home in "$HOME/.mozilla/firefox" "$HOME/.waterfox"; do
-  profile_dir="$(find "$browser_home" -maxdepth 1 -name '*.default*' 2>/dev/null | head -n1)" || true
+  profile_dir="$(find "$browser_home" -maxdepth 1 -name 'PrivacyOS' 2>/dev/null | head -n1)" || true
   if [[ -n "$profile_dir" ]]; then cp "$workdir/full-user.js" "$profile_dir/user.js" 2>/dev/null || true; fi
 done
 rm -rf "$workdir"

@@ -574,6 +574,69 @@ build_hosts_blocklist() {
   rm -rf "$workdir"
 }
 
+# bootstrap_and_rename_profile <browser_cmd> <profile_root> <user_js_source> <new_name>
+#
+# Firefox-family browsers discover their profile via profiles.ini/
+# installs.ini (each install's own section, keyed by a CityHash64 of its
+# install directory -- confirmed against Mozilla's own source, not guessed:
+# toolkit/mozapps/update/common/commonupdatedir.cpp) -- not by scanning for a
+# folder that looks right. On a genuinely fresh install (browser installed
+# via apt, never launched) that manifest doesn't exist yet, so there's no
+# profile to drop user.js into. Used to mean harden_browsers() silently did
+# nothing for every browser, every single fresh-install run -- caught via
+# real testing, not caught by anything in the script itself (see CLAUDE.md,
+# "user.js not landing on a truly fresh install").
+#
+# Fixed by having the script create that first-launch moment itself: a brief
+# --headless run (no window, no display server needed -- a real Gecko
+# engine feature, not an Xvfb-style hack) is enough to make the browser
+# bootstrap its own real profile and register its own real, correctly-
+# computed install-hash, for wherever this specific machine's package
+# actually put the binary -- nothing hardcoded or precomputed. Immediately
+# after, that freshly-registered profile is renamed (folder moved, then
+# Default=/Name=/Path= rewritten in its own profiles.ini to match -- the
+# install-hash section itself is never touched) to a fixed, known name so
+# later steps (and `upgrade`) can find it without guessing either. This
+# exact rename was tested directly, by hand, on real installs of all three
+# browsers before being scripted here: zero orphaned duplicate profiles, and
+# on Waterfox specifically, a real profile with real bookmarks survived the
+# round-trip intact.
+bootstrap_and_rename_profile() {
+  local browser_cmd="$1" profile_root="$2" user_js_source="$3" new_name="$4"
+  command -v "$browser_cmd" >/dev/null 2>&1 || return
+
+  timeout 20 "$browser_cmd" --headless >/dev/null 2>&1 &
+  local pid=$!
+  sleep 6
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+
+  local ini="$profile_root/profiles.ini"
+  if [[ ! -f "$ini" ]]; then
+    warn "$browser_cmd didn't create a profile after a headless launch -- skipping its hardening this run. Launch it once yourself, then re-run this script."
+    return
+  fi
+
+  # The install-hash section's Default= line names whatever random-salt
+  # folder the browser just generated for itself -- read that back rather
+  # than assume a naming pattern.
+  local old_name
+  old_name="$(sed -n 's/^Default=//p' "$ini" | head -n1)" || true
+  if [[ -z "$old_name" || ! -d "$profile_root/$old_name" ]]; then
+    warn "Couldn't identify $browser_cmd's freshly-created profile -- skipping its hardening this run."
+    return
+  fi
+
+  if ! mv "$profile_root/$old_name" "$profile_root/$new_name" 2>/dev/null; then
+    warn "Couldn't rename $browser_cmd's profile folder -- skipping its hardening this run."
+    return
+  fi
+  sed -i -E "s/^(Default=).*/\1$new_name/; s/^(Name=).*/\1$new_name/; s/^(Path=).*/\1$new_name/" "$ini" \
+    || warn "Renamed $browser_cmd's profile folder but couldn't update profiles.ini to match -- it may not be found correctly."
+  cp "$user_js_source" "$profile_root/$new_name/user.js" \
+    || warn "Couldn't copy hardened preferences into $browser_cmd's profile."
+}
+
 harden_browsers() {
   log "Building hardened browser preferences (Arkenfox + Betterfox)..."
   local workdir
@@ -590,22 +653,16 @@ harden_browsers() {
   # Arkenfox/Betterfox set on top risks fighting settings it already made
   # deliberately. Give it just the project's own small overrides instead.
   if [[ "$WANT_LIBREWOLF" == "yes" ]]; then
-    local profile_dir
-    # || true: find on a path that doesn't exist yet returns non-zero, and
-    # under pipefail that kills the whole script even though "no profile
-    # yet" is the normal, expected state here -- this browser's only been
-    # installed, never launched, so its profile folder can't exist yet.
-    # Confirmed via testing: this isn't an edge case, it's every run.
-    profile_dir="$(find "$HOME/.librewolf" -maxdepth 1 -name '*.default*' 2>/dev/null | head -n1)" || true
-    [[ -n "$profile_dir" ]] && cp "$overrides" "$profile_dir/user.js" 2>/dev/null || true
+    bootstrap_and_rename_profile librewolf "$HOME/.librewolf" "$overrides" PrivacyOS
   fi
-  for browser_home in "$HOME/.mozilla/firefox" "$HOME/.waterfox"; do
-    local profile_dir
-    profile_dir="$(find "$browser_home" -maxdepth 1 -name '*.default*' 2>/dev/null | head -n1)" || true
-    [[ -n "$profile_dir" ]] && cp "$workdir/full-user.js" "$profile_dir/user.js" 2>/dev/null || true
-  done
+  if [[ "$WANT_FIREFOX" == "yes" ]]; then
+    bootstrap_and_rename_profile firefox "$HOME/.mozilla/firefox" "$workdir/full-user.js" PrivacyOS
+  fi
+  if [[ "$WANT_WATERFOX" == "yes" ]]; then
+    bootstrap_and_rename_profile waterfox "$HOME/.waterfox" "$workdir/full-user.js" PrivacyOS
+  fi
+
   rm -rf "$workdir"
-  warn "Browser profile folders only exist after each browser's been launched once — if a user.js didn't get copied above, launch that browser once and re-run this step."
 }
 
 configure_extensions() {
@@ -983,14 +1040,20 @@ cat "$workdir"/arkenfox-user.js "$workdir"/betterfox-user.js "$overrides" \
 # hardens its own defaults, so it gets just the small overrides file, not
 # the full Arkenfox/Betterfox stack — keep these two in sync if either
 # changes.
+#
+# Looks for a profile folder named exactly "PrivacyOS" — that's the fixed
+# name privacyos.sh's own bootstrap_and_rename_profile() renames every
+# profile to at install time, replacing whatever random salt name the
+# browser generated for itself. Not a *.default* pattern anymore: our
+# renamed profiles don't contain "default" in the name at all.
 # || true: find on a path that doesn't exist yet returns non-zero, and
 # under pipefail that kills the whole script even though "no profile yet"
 # is a normal state to find a browser in.
-profile_dir="$(find "$HOME/.librewolf" -maxdepth 1 -name '*.default*' 2>/dev/null | head -n1)" || true
+profile_dir="$(find "$HOME/.librewolf" -maxdepth 1 -name 'PrivacyOS' 2>/dev/null | head -n1)" || true
 if [[ -n "$profile_dir" ]]; then cp "$overrides" "$profile_dir/user.js" 2>/dev/null || true; fi
 
 for browser_home in "$HOME/.mozilla/firefox" "$HOME/.waterfox"; do
-  profile_dir="$(find "$browser_home" -maxdepth 1 -name '*.default*' 2>/dev/null | head -n1)" || true
+  profile_dir="$(find "$browser_home" -maxdepth 1 -name 'PrivacyOS' 2>/dev/null | head -n1)" || true
   if [[ -n "$profile_dir" ]]; then cp "$workdir/full-user.js" "$profile_dir/user.js" 2>/dev/null || true; fi
 done
 rm -rf "$workdir"
