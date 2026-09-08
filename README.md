@@ -126,9 +126,12 @@ it if not), gets the system fully updated, installs a basic set of tools
 repo. None of that is PrivacyOS-specific; it's just what has to be true
 first. Once that's done, it hands off automatically to `privacyos.sh`,
 which is where the actual PrivacyOS install — hardening, browsers,
-everything this README describes below — happens. If `install.sh` tells you to log out and back in
-first (the sudo-fix case), do that, then run `./install.sh` again from the
-same directory — it picks up right where it left off, it won't re-download
+everything this README describes below — happens. If your user wasn't a
+sudoer yet (the sudo-fix case), `install.sh` reboots automatically once
+it's fixed that — tested directly, logging out and back in isn't reliably
+enough here, so it doesn't leave that to chance. Once it's back up, run
+`./install.sh` again from the same directory — it picks up right where it
+left off, it won't re-download
 what's already there.
 
 Prefer to do each step yourself instead of running a script you haven't

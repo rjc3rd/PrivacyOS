@@ -31,10 +31,24 @@ EOF
   su -c "/usr/sbin/usermod -aG sudo $(whoami)"
   cat <<'EOF'
 
-Done — your user now has sudo access. This needs a fresh login to take
-effect, though (group membership is only checked at login time): log out
-and back in (or reboot), then run ./install.sh again.
+Done — your user now has sudo access, but it needs a full reboot to
+actually take effect. Logging out and back in was tested directly and
+confirmed NOT enough on this setup (Cinnamon's session can hold onto
+enough state to skip re-checking group membership) — a real reboot is
+needed, not just a shorter alternative to one.
+
+privacyos.sh runs almost entirely through sudo, so PrivacyOS can't be
+installed until your sudo access is actually active — which means this
+reboot has to happen first. Not optional, just asking when, not if.
 EOF
+  read -r -p "Reboot now? [y/N] " reply
+  if [[ "$reply" =~ ^[Yy]$ ]]; then
+    # su, not sudo -- you don't have sudo yet, that's the whole reason
+    # we're here. Full path again, same PATH reason as usermod above.
+    su -c "/usr/sbin/reboot"
+  else
+    echo "OK — reboot whenever you're ready, then run ./install.sh again from this same directory to continue."
+  fi
   exit 0
 fi
 
