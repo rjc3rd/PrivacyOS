@@ -64,6 +64,16 @@ die()  { printf '\n\033[1;31m[privacyos] error:\033[0m %s\n' "$*" >&2; exit 1; }
 # A beat after announcing a phase, before its (often noisy) output starts --
 # long enough to actually read the line, not so long it drags out testing.
 pause() { sleep "${1:-3}"; }
+# Confirmed via testing: VMs with NAT-style networking (this project's own
+# dev/test setup included) often hand out IPv6 addresses that aren't
+# actually routable — wget tries IPv6 first by default, and "Network is
+# unreachable" on every IPv6 attempt before falling back to IPv4 adds real,
+# felt delay across every single fetch in this script, compounding into
+# something that looks like a hang. -4 skips straight to IPv4. Also
+# bounded rather than left to wget's own default timeout/retry behavior,
+# so a genuine network hiccup fails fast and visibly instead of sitting
+# there looking stuck.
+fetch() { wget -4 --timeout=15 --tries=2 "$@"; }
 
 usage() {
   cat <<'EOF'
@@ -367,7 +377,7 @@ add_repos() {
   fi
 
   if [[ "$WANT_FIREFOX" == "yes" ]]; then
-    wget -q https://packages.mozilla.org/apt/repo-signing-key.gpg -O- \
+    fetch -q https://packages.mozilla.org/apt/repo-signing-key.gpg -O- \
       | sudo tee /etc/apt/keyrings/mozilla.org.asc > /dev/null
     echo "deb [signed-by=/etc/apt/keyrings/mozilla.org.asc] https://packages.mozilla.org/apt mozilla main" \
       | sudo tee /etc/apt/sources.list.d/mozilla.list > /dev/null
@@ -385,7 +395,7 @@ add_repos() {
   fi
 
   if [[ "$WANT_APPS" == "yes" ]]; then
-    wget -qO- https://gitlab.com/paulcarroty/vscodium-deb-rpm-repo/raw/master/pub.gpg \
+    fetch -qO- https://gitlab.com/paulcarroty/vscodium-deb-rpm-repo/raw/master/pub.gpg \
       | gpg --dearmor | sudo tee /etc/apt/keyrings/vscodium.gpg > /dev/null
     echo "deb [signed-by=/etc/apt/keyrings/vscodium.gpg] https://download.vscodium.com/debs vscodium main" \
       | sudo tee /etc/apt/sources.list.d/vscodium.list > /dev/null
@@ -547,7 +557,7 @@ build_hosts_blocklist() {
   local custom_hosts="$PRIVACYOS_CONFIG_DIR/custom.hosts"
   if [[ -f "$custom_hosts" ]]; then cat "$custom_hosts" >> "$workdir/hosts.new"; fi
 
-  if wget -qO- https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts >> "$workdir/hosts.new" 2>/dev/null; then
+  if fetch -qO- https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts >> "$workdir/hosts.new" 2>/dev/null; then
     log "  merged StevenBlack/hosts"
   else
     warn "  couldn't fetch the StevenBlack list this run — /etc/hosts will only have your custom.hosts entries"
@@ -561,9 +571,9 @@ harden_browsers() {
   log "Building hardened browser preferences (Arkenfox + Betterfox)..."
   local workdir
   workdir="$(mktemp -d)"
-  wget -qO "$workdir/arkenfox-user.js" https://raw.githubusercontent.com/arkenfox/user.js/master/user.js \
+  fetch -qO "$workdir/arkenfox-user.js" https://raw.githubusercontent.com/arkenfox/user.js/master/user.js \
     || warn "couldn't fetch Arkenfox user.js"
-  wget -qO "$workdir/betterfox-user.js" https://raw.githubusercontent.com/yokoffing/Betterfox/main/user.js \
+  fetch -qO "$workdir/betterfox-user.js" https://raw.githubusercontent.com/yokoffing/Betterfox/main/user.js \
     || warn "couldn't fetch Betterfox user.js"
   local overrides="$PRIVACYOS_CONFIG_DIR/overrides-user.js"
   cat "$workdir"/arkenfox-user.js "$workdir"/betterfox-user.js "$overrides" \
@@ -827,6 +837,13 @@ PRIVACYOS_CONFIG_DIR="$HOME/.config/privacyos"
 
 log()  { printf '\n\033[1;32m[upgrade]\033[0m %s\n' "$*"; }
 warn() { printf '\n\033[1;33m[upgrade] warning:\033[0m %s\n' "$*" >&2; }
+# VMs with NAT-style networking often hand out unroutable IPv6 addresses —
+# wget tries those first by default, and "Network is unreachable" on each
+# one before falling back to IPv4 adds real delay to every fetch. -4 skips
+# straight to IPv4; also bounded rather than wget's own default so a real
+# network hiccup fails fast and visibly instead of sitting there looking
+# stuck.
+fetch() { wget -4 --timeout=15 --tries=2 "$@"; }
 
 if [[ "${EUID}" -eq 0 ]]; then
   echo "Run this as your normal user, not root — it calls sudo itself where needed." >&2
@@ -868,7 +885,7 @@ workdir="$(mktemp -d)"
 printf '127.0.0.1 localhost\n127.0.1.1 privacyos\n::1 localhost ip6-localhost ip6-loopback\n\n' >> "$workdir/hosts.new"
 custom_hosts="$PRIVACYOS_CONFIG_DIR/custom.hosts"
 if [[ -f "$custom_hosts" ]]; then cat "$custom_hosts" >> "$workdir/hosts.new"; fi
-if wget -qO- https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts >> "$workdir/hosts.new" 2>/dev/null; then
+if fetch -qO- https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts >> "$workdir/hosts.new" 2>/dev/null; then
   log "  merged StevenBlack/hosts"
 else
   warn "  couldn't fetch the StevenBlack list this run — /etc/hosts will only have your custom.hosts entries"
@@ -878,9 +895,9 @@ rm -rf "$workdir"
 
 log "Rebuilding hardened browser preferences (Arkenfox + Betterfox)..."
 workdir="$(mktemp -d)"
-wget -qO "$workdir/arkenfox-user.js" https://raw.githubusercontent.com/arkenfox/user.js/master/user.js \
+fetch -qO "$workdir/arkenfox-user.js" https://raw.githubusercontent.com/arkenfox/user.js/master/user.js \
   || warn "couldn't fetch Arkenfox user.js"
-wget -qO "$workdir/betterfox-user.js" https://raw.githubusercontent.com/yokoffing/Betterfox/main/user.js \
+fetch -qO "$workdir/betterfox-user.js" https://raw.githubusercontent.com/yokoffing/Betterfox/main/user.js \
   || warn "couldn't fetch Betterfox user.js"
 overrides="$PRIVACYOS_CONFIG_DIR/overrides-user.js"
 cat "$workdir"/arkenfox-user.js "$workdir"/betterfox-user.js "$overrides" \
