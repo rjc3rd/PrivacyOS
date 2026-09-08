@@ -307,9 +307,27 @@ purge_old_kernels() {
   # Every apt_upgrade that includes a new kernel leaves the old one behind —
   # autoremove alone doesn't always catch these. Never touches the kernel
   # actually running right now.
-  dpkg -l 'linux-image-[0-9]*' 'linux-headers-[0-9]*' 2>/dev/null | awk '/^ii/{print $2}' \
-    | grep -v -- "$(uname -r | cut -f1,2 -d'-')" | grep -e '[0-9]' \
-    | xargs -r sudo apt-get -y purge
+  #
+  # This whole pipeline is wrapped rather than run bare, for a real,
+  # confirmed-via-testing reason: with pipefail active, dpkg -l returns
+  # non-zero the instant EITHER pattern matches nothing at all (e.g. no
+  # linux-headers-* installed, common on a desktop image) even though the
+  # OTHER pattern found real packages to purge -- and grep returns
+  # non-zero too if there's simply nothing left to purge (also common,
+  # e.g. right after a fresh install with only one kernel). Either one
+  # poisons the whole pipeline's exit status and set -e kills the entire
+  # script right after a purge that actually succeeded, silently, no
+  # error. This is a tidy-up step, not load-bearing -- let it be
+  # best-effort rather than fatal.
+  local old_kernels
+  old_kernels="$(dpkg -l 'linux-image-[0-9]*' 'linux-headers-[0-9]*' 2>/dev/null \
+    | awk '/^ii/{print $2}' \
+    | grep -v -- "$(uname -r | cut -f1,2 -d'-')" \
+    | grep -e '[0-9]')" || true
+  if [[ -n "$old_kernels" ]]; then
+    echo "$old_kernels" | xargs -r sudo apt-get -y purge \
+      || warn "Couldn't purge some old kernel packages — not fatal, continuing."
+  fi
 }
 apt_cleanup() { purge_old_kernels; sudo apt-get clean -y; sudo apt-get autoclean -y; sudo apt-get autoremove --purge -y; }
 
@@ -805,9 +823,20 @@ sudo apt-get update
 sudo apt-get upgrade -y
 
 log "Removing old kernels no longer in use..."
-dpkg -l 'linux-image-[0-9]*' 'linux-headers-[0-9]*' 2>/dev/null | awk '/^ii/{print $2}' \
-  | grep -v -- "$(uname -r | cut -f1,2 -d'-')" | grep -e '[0-9]' \
-  | xargs -r sudo apt-get -y purge
+# Wrapped rather than run bare -- with pipefail active, dpkg -l returns
+# non-zero if EITHER pattern matches nothing (e.g. no linux-headers-*
+# installed) even when the other found real packages, and grep returns
+# non-zero too if there's simply nothing left to purge. Either one would
+# poison the pipeline's exit status and kill this whole script via set -e
+# right after a purge that actually succeeded. Best-effort, not fatal.
+old_kernels="$(dpkg -l 'linux-image-[0-9]*' 'linux-headers-[0-9]*' 2>/dev/null \
+  | awk '/^ii/{print $2}' \
+  | grep -v -- "$(uname -r | cut -f1,2 -d'-')" \
+  | grep -e '[0-9]')" || true
+if [[ -n "$old_kernels" ]]; then
+  echo "$old_kernels" | xargs -r sudo apt-get -y purge \
+    || warn "Couldn't purge some old kernel packages — not fatal, continuing."
+fi
 
 sudo apt-get clean -y
 sudo apt-get autoclean -y
