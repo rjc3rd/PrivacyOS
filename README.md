@@ -108,11 +108,17 @@ makes it real protection in the first place.
 ## Quick start
 
 ```sh
+sudo apt install git -y
 git clone https://github.com/rjc3rd/PrivacyOS.git
 cd PrivacyOS
 ./privacyos.sh --help
 ./privacyos.sh
 ```
+
+That first line matters — a stock Debian desktop, including the Cinnamon
+live image above, doesn't come with `git` installed by default. Safe to
+run even if you already have it (it just no-ops), but leaving it out is
+the single most likely reason this block would fail on a fresh install.
 
 Run it as your normal user, not root — it calls `sudo` itself wherever it
 needs to.
