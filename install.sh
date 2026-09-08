@@ -40,6 +40,10 @@ needed, not just a shorter alternative to one.
 privacyos.sh runs almost entirely through sudo, so PrivacyOS can't be
 installed until your sudo access is actually active — which means this
 reboot has to happen first. Not optional, just asking when, not if.
+
+If you say yes below, you'll be asked for your root password one more
+time — su asks fresh each time, it doesn't remember the one you just
+typed — that's what actually triggers the reboot itself.
 EOF
   read -r -p "Reboot now? [y/N] " reply
   if [[ "$reply" =~ ^[Yy]$ ]]; then
