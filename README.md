@@ -1,5 +1,12 @@
 # PrivacyOS
 
+> ⚠️ **Do not run this on a system you're already using.** `privacyos.sh`
+> reconfigures package sources, purges packages, rewrites `/etc/hosts`, and
+> overwrites browser profiles — it's built for a fresh Debian 13 (Trixie)
+> install with nothing on it you care about yet, not your daily driver. The
+> script itself asks you to type `yes` to confirm this before it changes
+> anything, but you should know that going in, not find out at that prompt.
+
 > **🚧 Work in progress — actively in testing.** The core install has
 > completed successfully, repeatedly, end-to-end — packages, DNS, hosts
 > blocklist, browser hardening, default browser and search engine, all
